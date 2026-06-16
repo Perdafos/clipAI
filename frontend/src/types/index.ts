@@ -95,6 +95,7 @@ export interface WSProgressMessage {
 
 export interface WSCompleteData {
   downloadUrl: string
+  videoTitle?: string
   duration: number
   qualityScore: number
   fileSize: number

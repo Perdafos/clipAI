@@ -42,7 +42,7 @@ router.post('/analyze', async (c) => {
 
     const metadata = await fetchVideoMetadata(url.trim())
 
-    const MAX_DURATION = parseInt(process.env.MAX_VIDEO_DURATION || '600')
+    const MAX_DURATION = parseInt(process.env.MAX_VIDEO_DURATION || '7200')
     if (metadata.duration > MAX_DURATION) {
       return c.json({
         success: false, data: null,

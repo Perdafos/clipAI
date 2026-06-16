@@ -355,6 +355,7 @@ export async function processJob(
     // ── STEP 8: Complete ──────────────────────────────────────
     sendProgress(jobId, 'complete', 'complete', 100, 'Your clip is ready!', {
       downloadUrl: `/downloads/${jobId}/final_output.mp4`,
+      videoTitle: metadata?.title || 'clip',
       duration: timestamps.total_duration,
       qualityScore: qualityResult?.score || 0.75,
       fileSize,

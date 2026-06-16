@@ -38,8 +38,15 @@ if (cleanedCount > 0) {
 const app = new Hono()
 
 // Middleware
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5173')
+  .split(',').map(s => s.trim())
+
 app.use('*', cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin) => {
+    if (!origin) return allowedOrigins[0]  // server-to-server requests
+    if (allowedOrigins.includes(origin)) return origin
+    return allowedOrigins[0]
+  },
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }))

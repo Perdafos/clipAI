@@ -86,7 +86,8 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
   const undo = useClipStore(s => s.undo)
   const redo = useClipStore(s => s.redo)
 
-  const videoUrl = `http://localhost:3001${resultData.downloadUrl}`
+  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+  const videoUrl = `${apiBase}${resultData.downloadUrl}`
 
   // Init timeline on mount
   useEffect(() => {
@@ -162,7 +163,8 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
   const handleDownload = () => {
     const a = document.createElement('a')
     a.href = videoUrl
-    a.download = 'clipai-highlight.mp4'
+    const ext = resultData.downloadUrl.endsWith('.mp4') ? '.mp4' : '.mp4'
+    a.download = `${resultData.videoTitle || 'clipai-highlight'}${ext}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -385,7 +387,7 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
           Download Clip
         </button>
         <button
-          onClick={() => navigator.clipboard?.writeText(window.location.origin + resultData.downloadUrl)}
+          onClick={() => navigator.clipboard?.writeText(import.meta.env.VITE_API_BASE_URL + resultData.downloadUrl)}
           className="flex items-center gap-2 px-5 py-3.5 rounded-xl border border-white/10 bg-white/4 hover:bg-white/8 text-white text-sm font-medium transition-all"
         >
           <Share2 className="w-4 h-4" />

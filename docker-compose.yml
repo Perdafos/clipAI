@@ -9,7 +9,7 @@ services:
       - "3001:3001"
     environment:
       - PORT=3001
-      - FRONTEND_URL=http://localhost:5173
+      - FRONTEND_URL=https://clip.perdafos.my.id
       - NINEROUTER_API_KEY=sk-3db4b611cc2dd3e3-5mdz5k-bc03f41f
       - NINEROUTER_BASE_URL=https://api.9router.com/v1
       - UPLOAD_DIR=/app/uploads

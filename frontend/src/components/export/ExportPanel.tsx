@@ -7,10 +7,13 @@ interface ExportPanelProps {
 }
 
 export function ExportPanel({ resultData }: ExportPanelProps) {
+  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
+
   const handleDownload = () => {
     const a = document.createElement('a')
-    a.href = resultData.downloadUrl
-    a.download = 'clip.mp4'
+    a.href = `${apiBase}${resultData.downloadUrl}`
+    const ext = resultData.downloadUrl.endsWith('.mp4') ? '.mp4' : '.mp4'
+    a.download = `${resultData.videoTitle || 'clip'}${ext}`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
@@ -64,7 +67,7 @@ export function ExportPanel({ resultData }: ExportPanelProps) {
           Download MP4
         </button>
         <button
-          onClick={() => navigator.clipboard?.writeText(window.location.origin + resultData.downloadUrl)}
+          onClick={() => navigator.clipboard?.writeText(import.meta.env.VITE_API_BASE_URL + resultData.downloadUrl)}
           className="flex items-center gap-2 px-4 py-3.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/8 text-white text-sm font-medium transition-all"
         >
           <Share2 className="w-4 h-4" />

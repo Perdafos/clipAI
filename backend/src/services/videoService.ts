@@ -8,7 +8,7 @@ import ffprobeStatic from 'ffprobe-static'
 
 export const ffmpegPath: string = (_ffmpegPath as string) || ''
 const ffprobePath: string = (ffprobeStatic as any)?.path || ''
-const ytdlpPath = path.resolve(__dirname, '../../bin/yt-dlp.exe')
+const ytdlpPath = path.resolve(__dirname, '../../bin/yt-dlp')
 
 const execAsync = promisify(exec)
 
