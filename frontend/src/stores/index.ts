@@ -209,7 +209,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     const s = get()
     return {
       mode: s.mode,
-      track: s.selectedTrack || undefined,
+      trackId: s.selectedTrack?.id || undefined,
       uploadedFileId: s.uploadedFileId || undefined,
       volume: s.volume,
       fadeIn: s.fadeIn,

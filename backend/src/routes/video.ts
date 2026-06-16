@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { v4 as uuidv4 } from 'uuid'
-import { fetchVideoMetadata, createJobDir, downloadVideo, extractAudio } from '../services/videoService'
+import { fetchVideoMetadata, hasYtdlp, createJobDir, downloadVideo, extractAudio } from '../services/videoService'
 import { analyzeVideoScenes, generateClipTimestamps, scoreClipQuality } from '../services/aiService'
 import { processJob, jobStore } from './ws'
 
@@ -24,6 +24,14 @@ router.post('/analyze', async (c) => {
   const requestId = uuidv4()
 
   try {
+    if (!hasYtdlp) {
+      return c.json({
+        success: false, data: null,
+        error: 'Server is not configured for video processing. yt-dlp is missing. Contact admin.',
+        requestId
+      }, 500)
+    }
+
     const body = await c.req.json()
     const { url } = body
 
@@ -35,7 +43,7 @@ router.post('/analyze', async (c) => {
     if (!platform) {
       return c.json({
         success: false, data: null,
-        error: 'URL is not supported. Please use YouTube, TikTok, or Instagram URLs.',
+        error: 'URL not supported. Use YouTube, TikTok, or Instagram.',
         requestId
       }, 400)
     }
@@ -46,23 +54,34 @@ router.post('/analyze', async (c) => {
     if (metadata.duration > MAX_DURATION) {
       return c.json({
         success: false, data: null,
-        error: `Video duration (${metadata.duration}s) exceeds maximum allowed (${MAX_DURATION}s). Please use a shorter video.`,
+        error: `Video too long (${Math.floor(metadata.duration / 60)}min). Max ${Math.floor(MAX_DURATION / 60)}min.`,
         requestId
       }, 422)
     }
+
+    // Store metadata temporarily — process endpoint will fetch it by URL hash
+    const urlHash = simpleHash(url.trim())
+    jobStore.set(`meta_${urlHash}`, { metadata, platform, url: url.trim() })
+    setTimeout(() => jobStore.delete(`meta_${urlHash}`), 5 * 60 * 1000)
 
     return c.json({ success: true, data: metadata, error: null, requestId })
 
   } catch (err: unknown) {
     const error = err as Error
-    console.error('Video analyze error:', error.message)
+    console.error(`[Video Analyze Error] ${error.message}`)
     return c.json({
       success: false, data: null,
-      error: 'Failed to fetch video information. The video may be private or unavailable.',
+      error: error.message || 'Failed to analyze video',
       requestId
     }, 500)
   }
 })
+
+function simpleHash(s: string): string {
+  let h = 0
+  for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0 }
+  return Math.abs(h).toString(36)
+}
 
 // POST /api/video/process - Start full processing job
 router.post('/process', async (c) => {
@@ -76,23 +95,38 @@ router.post('/process', async (c) => {
       return c.json({ success: false, data: null, error: 'URL is required', requestId }, 400)
     }
 
+    if (!hasYtdlp) {
+      return c.json({
+        success: false, data: null,
+        error: 'Server cannot process videos — yt-dlp not installed.',
+        requestId
+      }, 500)
+    }
+
     const jobId = uuidv4()
     const wsPort = process.env.PORT || '3001'
     const wsUrl = `ws://localhost:${wsPort}/ws/${jobId}`
 
-    // Store initial job state
+    // Retrieve metadata stored from analyze step
+    const urlHash = simpleHash(url.trim())
+    const metaData = jobStore.get(`meta_${urlHash}`) as { metadata: unknown; platform: string; url: string } | undefined
+    const metadata = metaData?.metadata || null
+    // Clean up cached metadata
+    jobStore.delete(`meta_${urlHash}`)
+
     jobStore.set(jobId, {
       status: 'queued',
       url,
       clipConfig,
       musicSelection,
       clipPrompt,
+      metadata, // pass stored metadata so processJob can use it
       createdAt: new Date().toISOString(),
     })
 
-    // Start processing in background (don't await)
+    // Start processing in background
     processJob(jobId, url, clipConfig, musicSelection, clipPrompt).catch(err => {
-      console.error(`Job ${jobId} failed:`, err)
+      console.error(`Job ${jobId} failed:`, err.message)
     })
 
     return c.json({

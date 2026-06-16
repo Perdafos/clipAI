@@ -7,9 +7,9 @@ interface VideoPreviewPanelProps {
 }
 
 const PLATFORM_COLORS: Record<string, string> = {
-  youtube: 'bg-red-500/20 text-red-300 border-red-500/20',
-  tiktok: 'bg-slate-500/20 text-slate-300 border-slate-500/20',
-  instagram: 'bg-pink-500/20 text-pink-300 border-pink-500/20',
+  youtube: 'bg-[#FF0000]/10 text-[#FF0000]',
+  tiktok: 'bg-black/5 text-[#1D1D1F]',
+  instagram: 'bg-[#E4405F]/10 text-[#E4405F]',
 }
 
 function formatCount(n?: number): string {
@@ -21,9 +21,9 @@ function formatCount(n?: number): string {
 
 export function VideoPreviewPanel({ metadata }: VideoPreviewPanelProps) {
   return (
-    <div className="rounded-2xl border border-white/8 bg-white/3 overflow-hidden">
+    <div className="apple-card overflow-hidden">
       {/* Thumbnail */}
-      <div className="relative aspect-video bg-[#1A1A2E]">
+      <div className="relative aspect-video bg-[#F5F5F7]">
         {metadata.thumbnail ? (
           <img
             src={metadata.thumbnail}
@@ -31,25 +31,23 @@ export function VideoPreviewPanel({ metadata }: VideoPreviewPanelProps) {
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-slate-600">
+          <div className="w-full h-full flex items-center justify-center text-[#86868B]">
             <span className="text-4xl">🎬</span>
           </div>
         )}
-        {/* Duration badge */}
-        <div className="absolute bottom-3 right-3 px-2 py-1 rounded-lg bg-black/80 text-white text-xs font-mono font-medium">
+        <div className="absolute bottom-3 right-3 px-2 py-1 rounded-lg bg-white/90 backdrop-blur-sm text-[#1D1D1F] text-xs font-mono font-medium shadow-sm">
           {formatDuration(metadata.duration)}
         </div>
-        {/* Platform badge */}
-        <div className={`absolute top-3 left-3 px-2 py-1 rounded-lg border text-xs font-medium capitalize ${PLATFORM_COLORS[metadata.platform]}`}>
+        <div className={`absolute top-3 left-3 px-2 py-1 rounded-lg text-xs font-medium capitalize shadow-sm ${PLATFORM_COLORS[metadata.platform]}`}>
           {metadata.platform}
         </div>
       </div>
 
       {/* Info */}
       <div className="p-4">
-        <h3 className="font-semibold text-sm leading-tight line-clamp-2 mb-3">{metadata.title}</h3>
+        <h3 className="font-semibold text-sm leading-tight line-clamp-2 mb-3 text-[#1D1D1F]">{metadata.title}</h3>
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-[#86868B]">
           <span className="flex items-center gap-1">
             <User className="w-3 h-3" />
             {metadata.uploader}
@@ -73,7 +71,7 @@ export function VideoPreviewPanel({ metadata }: VideoPreviewPanelProps) {
         </div>
 
         {metadata.description && (
-          <p className="mt-3 text-xs text-slate-600 line-clamp-2 leading-relaxed">
+          <p className="mt-3 text-xs text-[#86868B] line-clamp-2 leading-relaxed">
             {metadata.description}
           </p>
         )}

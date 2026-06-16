@@ -1,9 +1,9 @@
 import axios from 'axios'
 
 const NINEROUTER_BASE_URL = process.env.NINEROUTER_BASE_URL || 'https://api.9router.com/v1'
-const NINEROUTER_API_KEY = process.env.NINEROUTER_API_KEY!
+const NINEROUTER_API_KEY = process.env.NINEROUTER_API_KEY
 
-export type NineRouterModel = 
+export type NineRouterModel =
   | 'big-pickle'
   | 'deepseek-v4-flash-free'
   | 'mimo-v2.5-free'
@@ -13,7 +13,7 @@ export type NineRouterModel =
   | 'north-mini-code-free'
   | 'mimo-auto'
 
-export type AITask = 
+export type AITask =
   | 'scene_analysis'
   | 'clip_timestamps'
   | 'music_recommend'
@@ -51,20 +51,20 @@ interface AIResponse<T = unknown> {
 
 /**
  * Call 9router AI with automatic model selection and fallback.
- * Always returns parsed JSON if responseFormat is 'json'.
+ * Throws if ALL models fail — no silent mock data.
  */
 export async function callAI<T = unknown>(options: AICallOptions): Promise<AIResponse<T>> {
   const {
-    task,
-    systemPrompt,
-    userPrompt,
-    temperature = 0.3,
-    maxTokens = 2048,
-    responseFormat = 'json'
+    task, systemPrompt, userPrompt,
+    temperature = 0.3, maxTokens = 2048, responseFormat = 'json'
   } = options
 
+  if (!NINEROUTER_API_KEY) {
+    throw new Error('9router API key is not configured (NINEROUTER_API_KEY). Contact server admin.')
+  }
+
   const models = MODEL_MAP[task]
-  let lastError: string = ''
+  let lastError = ''
 
   for (const model of models) {
     try {
@@ -85,7 +85,7 @@ export async function callAI<T = unknown>(options: AICallOptions): Promise<AIRes
             'Authorization': `Bearer ${NINEROUTER_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          timeout: 60000, // 60s timeout
+          timeout: 60000,
         }
       )
 
@@ -93,34 +93,46 @@ export async function callAI<T = unknown>(options: AICallOptions): Promise<AIRes
       const tokensUsed = response.data.usage?.total_tokens || 0
 
       if (responseFormat === 'json') {
+        const cleaned = content.replace(/```json\n?|\n?```/g, '').trim()
         try {
-          // Strip markdown code blocks if present
-          const cleaned = content.replace(/```json\n?|\n?```/g, '').trim()
           const parsed = JSON.parse(cleaned) as T
           return { success: true, data: parsed, error: null, model, tokensUsed }
         } catch {
-          lastError = `Model ${model} returned invalid JSON`
+          lastError = `Model ${model} returned invalid JSON. Response: ${cleaned.slice(0, 200)}`
           continue
         }
       }
 
+      if (!content) {
+        lastError = `Model ${model} returned empty response`
+        continue
+      }
       return { success: true, data: content as T, error: null, model, tokensUsed }
 
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { status: number }, message: string }
-      if (axiosErr.response?.status === 429) {
-        // Rate limited - try next model
-        lastError = `Model ${model} is rate limited`
+      const axiosErr = err as { response?: { status: number, data?: any }, message: string, code?: string }
+      if (axiosErr.code === 'ECONNABORTED') {
+        lastError = `Model ${model} timed out`
         continue
       }
-      lastError = axiosErr.message || 'Unknown AI error'
+      if (axiosErr.response?.status === 429) {
+        lastError = `Model ${model} rate limited`
+        continue
+      }
+      if (axiosErr.response?.status === 401 || axiosErr.response?.status === 403) {
+        throw new Error('9router API authentication failed. Check API key.')
+      }
+      if (axiosErr.response?.status) {
+        lastError = `Model ${model} returned HTTP ${axiosErr.response.status}: ${JSON.stringify(axiosErr.response.data).slice(0, 200)}`
+        continue
+      }
+      lastError = `${model}: ${axiosErr.message?.slice(0, 200) || 'unknown error'}`
       continue
     }
   }
 
-  // If we reach here, all AI calls failed.
-  console.warn(`[ClipAI Fallback] 9router calls failed for task "${task}". Reason: ${lastError}.`)
-  return { success: false, data: null, error: lastError, model: 'none', tokensUsed: 0 }
+  // All models failed — throw so the pipeline shows real error, not mock data
+  throw new Error(`AI service unavailable (${task}). Tried ${models.length} models. Last error: ${lastError}`)
 }
 
 // ─── Specialized AI Functions ────────────────────────────────────
@@ -145,14 +157,13 @@ export async function analyzeVideoScenes(metadata: {
   duration: number
   platform: string
   description?: string
-}): Promise<SceneAnalysisResult | null> {
-  // Detect if this is an NBA/basketball video
+}): Promise<SceneAnalysisResult> {
   const title = metadata.title.toLowerCase()
   const desc = (metadata.description || '').toLowerCase()
   const isBasketball = ['nba', 'basketball', 'dunk', 'lakers', 'celtics', 'knicks', 'warriors', 'lebron', 'curry', 'hoop', 'highlights', 'nbl', 'ncaa'].some(kw => title.includes(kw) || desc.includes(kw))
 
   const systemPrompt = isBasketball
-    ? `You are an expert NBA highlight editor. Your job is to identify the most exciting basketball plays: dunks, ankle breakers, blocks, steals, and three-pointers. Respond with valid JSON only.`
+    ? `You are an expert NBA highlight editor. Identify the most exciting basketball plays: dunks, ankle breakers, blocks, steals, and three-pointers. Respond with valid JSON only.`
     : `You are an expert video editor. Analyze the video and identify the most engaging moments. Respond with valid JSON only.`
 
   const sportContext = isBasketball ? `
@@ -207,38 +218,7 @@ Rules:
     maxTokens: 2000,
   })
 
-  if (!result.data) {
-    const dur = metadata.duration || 120
-    // Smart fallback: spread NBA-like highlights across the video
-    const nbaTypes: SceneAnalysisResult['scenes'][0]['clip_type'][] = isBasketball
-      ? ['dunk', 'ankle_breaker', 'three_pointer', 'block', 'steal', 'highlight']
-      : ['highlight', 'highlight', 'highlight', 'highlight']
-    
-    const numClips = Math.min(6, Math.max(3, Math.floor(dur / 30)))
-    const scenes: SceneAnalysisResult['scenes'] = []
-    
-    for (let i = 0; i < numClips; i++) {
-      const segStart = Math.floor((dur / numClips) * i + 5)
-      const segEnd = Math.min(segStart + 8 + Math.floor(Math.random() * 8), dur)
-      scenes.push({
-        start: segStart,
-        end: segEnd,
-        score: 0.75 + Math.random() * 0.25,
-        type: 'highlight',
-        clip_type: nbaTypes[i % nbaTypes.length],
-        reason: isBasketball ? `NBA highlight play at ${Math.floor(segStart / 60)}:${String(segStart % 60).padStart(2, '0')}` : `Highlight moment`,
-        mood: 'energetic',
-      })
-    }
-    
-    return {
-      scenes,
-      recommended_duration: 60,
-      dominant_mood: 'energetic',
-      suggested_music_genre: isBasketball ? 'hiphop' : 'electronic'
-    }
-  }
-
+  if (!result.data) throw new Error('AI scene analysis returned no data')
   return result.data
 }
 
@@ -255,10 +235,10 @@ export async function recommendMusic(params: {
   targetDuration: number
   platform: string
   availableTracks: Array<{ id: string; title: string; genre: string[]; mood: string[]; bpm: number }>
-}): Promise<MusicRecommendationResult | null> {
+}): Promise<MusicRecommendationResult> {
   const result = await callAI<MusicRecommendationResult>({
     task: 'music_recommend',
-    systemPrompt: `You are a music supervisor for social media video content. Match music to video mood. Respond with valid JSON only.`,
+    systemPrompt: 'You are a music supervisor for social media video content. Match music to video mood. Respond with valid JSON only.',
     userPrompt: `Select the best music track for this video:
 
 Video mood: ${params.dominantMood}
@@ -279,15 +259,7 @@ Return JSON:
     temperature: 0.5,
   })
 
-  if (!result.data) {
-    return {
-      recommended_track_id: params.availableTracks[0]?.id || 'elec_001',
-      confidence: 0.95,
-      reason: 'Fallback music selection',
-      alternative_track_ids: []
-    }
-  }
-
+  if (!result.data) throw new Error('AI music recommendation returned no data')
   return result.data
 }
 
@@ -304,10 +276,10 @@ export async function generateClipTimestamps(params: {
   scenes: SceneAnalysisResult['scenes']
   targetDuration: number
   videoDuration: number
-}): Promise<ClipTimestampsResult | null> {
+}): Promise<ClipTimestampsResult> {
   const result = await callAI<ClipTimestampsResult>({
     task: 'clip_timestamps',
-    systemPrompt: `You are a video editor. Select and arrange video scenes into an engaging highlight clip. Respond with valid JSON only.`,
+    systemPrompt: 'You are a video editor. Select and arrange video scenes into an engaging highlight clip. Respond with valid JSON only.',
     userPrompt: `Create a ${params.targetDuration}-second highlight clip from these scenes:
 
 Available scenes:
@@ -328,25 +300,7 @@ Return JSON:
     temperature: 0.3,
   })
 
-  if (!result.data) {
-    const vd = params.videoDuration || 120
-    const td = params.targetDuration || 60
-    
-    // Dynamically pick clips from the video to make it cool and spread out!
-    const part1 = Math.floor(td * 0.3)
-    const part2 = Math.floor(td * 0.4)
-    const part3 = td - part1 - part2
-    
-    return {
-      clips: [
-        { start: Math.min(vd * 0.1, vd - part1), end: Math.min(vd * 0.1, vd - part1) + part1, transition: 'cut' },
-        { start: Math.min(vd * 0.5, vd - part2), end: Math.min(vd * 0.5, vd - part2) + part2, transition: 'fade' },
-        { start: Math.min(vd * 0.8, vd - part3), end: Math.min(vd * 0.8, vd - part3) + part3, transition: 'cut' }
-      ],
-      total_duration: td
-    }
-  }
-
+  if (!result.data) throw new Error('AI clip timestamp generation returned no data')
   return result.data
 }
 
@@ -362,7 +316,7 @@ export async function generateFFmpegCommand(params: {
 }): Promise<string | null> {
   const result = await callAI<string>({
     task: 'ffmpeg_command',
-    systemPrompt: `You are an FFmpeg expert. Generate precise FFmpeg commands. Return ONLY the command, no explanation, no markdown.`,
+    systemPrompt: 'You are an FFmpeg expert. Generate precise FFmpeg commands. Return ONLY the command, no explanation, no markdown.',
     userPrompt: `Generate an FFmpeg command to create a video clip:
 
 Input video: "${params.inputFile}"
@@ -381,10 +335,10 @@ Requirements:
 - Apply fade in/out effects
 - Output as MP4 H.264
 - Keep original audio mixed with music
-- Resize/crop the video to the specified aspect ratio. 
-  - For '9:16': crop and scale to 1080x1920 (vertical video using scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920)
-  - For '1:1': crop and scale to 1080x1080 (square video using scale=1080:1080:force_original_aspect_ratio=increase,crop=1080:1080)
-  - For '16:9': scale to 1920x1080 (standard landscape)
+- Resize/crop the video to the specified aspect ratio
+- For '9:16': crop and scale to 1080x1920
+- For '1:1': crop and scale to 1080x1080
+- For '16:9': scale to 1920x1080
 
 Return ONLY the ffmpeg command.`,
     temperature: 0.1,
@@ -400,10 +354,10 @@ export async function scoreClipQuality(params: {
   clipCount: number
   hasMusic: boolean
   dominantMood: string
-}): Promise<{ score: number; feedback: string } | null> {
+}): Promise<{ score: number; feedback: string }> {
   const result = await callAI<{ score: number; feedback: string }>({
     task: 'quality_score',
-    systemPrompt: `You are a video quality reviewer. Score video clips on engagement potential. Respond with valid JSON only.`,
+    systemPrompt: 'You are a video quality reviewer. Score video clips on engagement potential. Respond with valid JSON only.',
     userPrompt: `Score this video clip on quality and engagement potential:
 
 Original title: "${params.title}"
@@ -420,12 +374,6 @@ Return JSON:
     temperature: 0.3,
   })
 
-  if (!result.data) {
-    return {
-      score: 0.88,
-      feedback: 'Great pacing with natural transitions and upbeat mood matching.'
-    }
-  }
-
+  if (!result.data) throw new Error('AI quality scoring returned no data')
   return result.data
 }

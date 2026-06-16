@@ -3,16 +3,21 @@
 @tailwind utilities;
 
 :root {
-  --brand-primary: #7C3AED;
-  --brand-accent: #06B6D4;
-  --brand-dark: #0F0F1A;
-  --brand-surface: #1A1A2E;
-  --brand-border: #2D2D44;
-  --brand-text: #E2E8F0;
-  --brand-muted: #94A3B8;
-  --brand-success: #10B981;
-  --brand-warning: #F59E0B;
-  --brand-error: #EF4444;
+  --brand-primary: #0071E3;
+  --brand-accent: #5856D6;
+  --brand-dark: #FFFFFF;
+  --brand-surface: #F5F5F7;
+  --brand-border: #D2D2D7;
+  --brand-text: #1D1D1F;
+  --brand-muted: #6E6E73;
+  --brand-tertiary: #86868B;
+  --brand-success: #34C759;
+  --brand-warning: #FF9500;
+  --brand-error: #FF3B30;
+  --brand-blue: #007AFF;
+  --brand-indigo: #5856D6;
+  --brand-surface-raised: #FAFAFA;
+  --brand-overlay: rgba(255, 255, 255, 0.8);
 }
 
 * {
@@ -22,20 +27,51 @@
 body {
   background: var(--brand-dark);
   color: var(--brand-text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  padding: 0;
+}
+
+::selection {
+  background: rgba(0, 113, 227, 0.15);
+  color: var(--brand-primary);
 }
 
 .custom-scroll::-webkit-scrollbar {
   width: 4px;
+  height: 4px;
 }
 .custom-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 .custom-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.1);
+  background: rgba(0,0,0,0.08);
   border-radius: 2px;
 }
 .custom-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,0.2);
+  background: rgba(0,0,0,0.15);
+}
+
+/* Apple-style subtle backdrop blur for headers */
+.apple-blur {
+  background-color: rgba(255, 255, 255, 0.72);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* Card shadow style */
+.apple-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* Input focus ring */
+.apple-focus-ring:focus {
+  outline: none;
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
 }

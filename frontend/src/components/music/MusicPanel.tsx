@@ -68,26 +68,23 @@ export function MusicPanel({ videoMetadata, onStartProcessing, isStarting }: Mus
     } catch { /* error handled silently */ }
   }
 
-
-
   return (
-    <div className="rounded-2xl border border-white/8 bg-white/3 p-5 flex flex-col gap-5">
-      {/* Header */}
+    <div className="apple-card p-5 flex flex-col gap-5">
       <div className="flex items-center gap-2">
-        <Music className="w-4 h-4 text-cyan-400" />
-        <h2 className="font-semibold text-sm">Background Music</h2>
+        <Music className="w-4 h-4 text-[#5856D6]" />
+        <h2 className="font-semibold text-sm text-[#1D1D1F]">Background Music</h2>
       </div>
 
       {/* Mode Tabs */}
-      <div className="flex gap-1 p-1 rounded-xl bg-white/5 border border-white/5">
+      <div className="flex gap-1 p-1 rounded-xl bg-[#F5F5F7] border border-black/[0.04]">
         {MODE_TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             onClick={() => musicStore.setMode(key)}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all ${
               musicStore.mode === key
-                ? 'bg-white/10 text-white shadow'
-                : 'text-slate-500 hover:text-slate-300'
+                ? 'bg-white text-[#1D1D1F] shadow-sm'
+                : 'text-[#86868B] hover:text-[#1D1D1F]'
             }`}
           >
             <Icon className="w-3.5 h-3.5" />
@@ -100,26 +97,26 @@ export function MusicPanel({ videoMetadata, onStartProcessing, isStarting }: Mus
       {musicStore.mode === 'ai' && (
         <div className="flex-1">
           {musicStore.isLoadingRecommendation && (
-            <div className="flex flex-col items-center justify-center py-8 gap-3 text-slate-400">
-              <Loader2 className="w-6 h-6 animate-spin text-cyan-400" />
+            <div className="flex flex-col items-center justify-center py-8 gap-3 text-[#6E6E73]">
+              <Loader2 className="w-6 h-6 animate-spin text-[#5856D6]" />
               <p className="text-sm">AI is selecting the perfect track...</p>
             </div>
           )}
           {!musicStore.isLoadingRecommendation && musicStore.aiRecommendation && (
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                <span className="text-xs text-cyan-400 font-medium">AI Recommendation</span>
-                <span className="ml-auto text-xs text-slate-500">
+                <Sparkles className="w-3.5 h-3.5 text-[#5856D6]" />
+                <span className="text-xs text-[#5856D6] font-medium">AI Recommendation</span>
+                <span className="ml-auto text-xs text-[#86868B]">
                   {Math.round(musicStore.aiConfidence * 100)}% match
                 </span>
               </div>
               <TrackCard track={musicStore.aiRecommendation} isSelected />
-              <p className="text-xs text-slate-500 mt-2 leading-relaxed">{musicStore.aiReason}</p>
+              <p className="text-xs text-[#6E6E73] mt-2 leading-relaxed">{musicStore.aiReason}</p>
 
               {musicStore.aiAlternatives.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-xs text-slate-500 mb-2">Alternatives:</p>
+                  <p className="text-xs text-[#86868B] mb-2">Alternatives:</p>
                   <div className="space-y-1.5">
                     {musicStore.aiAlternatives.slice(0, 2).map(track => (
                       <TrackCard
@@ -135,7 +132,7 @@ export function MusicPanel({ videoMetadata, onStartProcessing, isStarting }: Mus
 
               <button
                 onClick={requestAIRecommendation}
-                className="mt-3 text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1"
+                className="mt-3 text-xs text-[#0071E3] hover:text-[#0077ED] transition-colors flex items-center gap-1"
               >
                 <Zap className="w-3 h-3" />
                 Re-generate recommendation
@@ -143,9 +140,9 @@ export function MusicPanel({ videoMetadata, onStartProcessing, isStarting }: Mus
             </div>
           )}
           {!musicStore.isLoadingRecommendation && musicStore.recommendError && (
-            <div className="text-xs text-red-400 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <div className="text-xs text-[#FF3B30] p-3 rounded-lg bg-[#FF3B30]/5 border border-[#FF3B30]/20">
               {musicStore.recommendError}
-              <button onClick={requestAIRecommendation} className="block mt-2 underline">
+              <button onClick={requestAIRecommendation} className="block mt-2 underline font-medium">
                 Retry
               </button>
             </div>
@@ -153,12 +150,12 @@ export function MusicPanel({ videoMetadata, onStartProcessing, isStarting }: Mus
         </div>
       )}
 
-      {/* Manual Library Mode */}
+      {/* Manual Library */}
       {musicStore.mode === 'manual' && (
         <div className="flex-1">
           {loadingLibrary ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+              <Loader2 className="w-5 h-5 animate-spin text-[#86868B]" />
             </div>
           ) : (
             <div className="space-y-1.5 max-h-[360px] overflow-y-auto pr-1 custom-scroll">
@@ -175,19 +172,19 @@ export function MusicPanel({ videoMetadata, onStartProcessing, isStarting }: Mus
         </div>
       )}
 
-      {/* Upload Mode */}
+      {/* Upload */}
       {musicStore.mode === 'upload' && (
         <div className="flex-1">
-          <label className="flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed border-white/10 hover:border-violet-500/40 cursor-pointer transition-all group">
-            <Upload className="w-8 h-8 text-slate-500 group-hover:text-violet-400 transition-colors mb-3" />
-            <span className="text-sm text-slate-400 group-hover:text-white transition-colors">
+          <label className="flex flex-col items-center justify-center p-8 rounded-xl border-2 border-dashed border-[#D2D2D7] hover:border-[#0071E3]/40 cursor-pointer transition-all group bg-[#F5F5F7]/50">
+            <Upload className="w-8 h-8 text-[#86868B] group-hover:text-[#0071E3] transition-colors mb-3" />
+            <span className="text-sm text-[#6E6E73] group-hover:text-[#1D1D1F] transition-colors">
               {musicStore.uploadedFilename || 'Click to upload audio'}
             </span>
-            <span className="text-xs text-slate-600 mt-1">MP3, WAV, AAC — max 50MB</span>
+            <span className="text-xs text-[#86868B] mt-1">MP3, WAV, AAC — max 50MB</span>
             <input type="file" accept="audio/*" onChange={handleUpload} className="hidden" />
           </label>
           {musicStore.uploadedFilename && (
-            <div className="mt-2 flex items-center gap-2 text-xs text-emerald-400">
+            <div className="mt-2 flex items-center gap-2 text-xs text-[#34C759]">
               <Check className="w-3.5 h-3.5" />
               {musicStore.uploadedFilename} uploaded
             </div>
@@ -195,18 +192,18 @@ export function MusicPanel({ videoMetadata, onStartProcessing, isStarting }: Mus
         </div>
       )}
 
-      {/* Volume Control */}
+      {/* Volume */}
       {musicStore.mode !== 'upload' && (
         <div className="flex items-center gap-3">
-          <Volume2 className="w-4 h-4 text-slate-500 flex-shrink-0" />
+          <Volume2 className="w-4 h-4 text-[#86868B] flex-shrink-0" />
           <input
             type="range"
             min="0" max="1" step="0.05"
             value={musicStore.volume}
             onChange={(e) => musicStore.setVolume(parseFloat(e.target.value))}
-            className="flex-1 accent-violet-500"
+            className="flex-1 accent-[#0071E3]"
           />
-          <span className="text-xs text-slate-500 w-8 text-right">
+          <span className="text-xs text-[#86868B] w-8 text-right">
             {Math.round(musicStore.volume * 100)}%
           </span>
         </div>
@@ -216,7 +213,7 @@ export function MusicPanel({ videoMetadata, onStartProcessing, isStarting }: Mus
       <button
         onClick={onStartProcessing}
         disabled={isStarting}
-        className="w-full py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all shadow-lg shadow-violet-500/25 flex items-center justify-center gap-2"
+        className="w-full py-3.5 rounded-xl bg-[#0071E3] hover:bg-[#0077ED] active:bg-[#0068D1] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all shadow-sm flex items-center justify-center gap-2"
       >
         {isStarting ? (
           <>
@@ -246,26 +243,26 @@ function TrackCard({
       onClick={onSelect}
       className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
         isSelected
-          ? 'border-cyan-500/40 bg-cyan-500/10'
+          ? 'border-[#5856D6]/40 bg-[#5856D6]/5'
           : onSelect
-            ? 'border-white/5 bg-white/3 hover:border-white/10 cursor-pointer'
-            : 'border-white/5 bg-white/3'
+            ? 'border-[#D2D2D7] bg-white hover:border-[#86868B] cursor-pointer'
+            : 'border-[#D2D2D7] bg-white'
       }`}
     >
       <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-        isSelected ? 'bg-cyan-500/30' : 'bg-white/5'
+        isSelected ? 'bg-[#5856D6]/20' : 'bg-[#F5F5F7]'
       }`}>
         {isSelected ? (
-          <Check className="w-4 h-4 text-cyan-400" />
+          <Check className="w-4 h-4 text-[#5856D6]" />
         ) : (
-          <Play className="w-4 h-4 text-slate-500" />
+          <Play className="w-4 h-4 text-[#86868B]" />
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-white truncate">{track.title}</div>
-        <div className="text-xs text-slate-500 mt-0.5">{track.genre.slice(0, 2).join(' · ')} · {track.bpm} BPM</div>
+        <div className="text-xs font-medium text-[#1D1D1F] truncate">{track.title}</div>
+        <div className="text-xs text-[#86868B] mt-0.5">{track.genre.slice(0, 2).join(' · ')} · {track.bpm} BPM</div>
       </div>
-      <div className="text-xs text-slate-500 flex-shrink-0">{formatDuration(track.duration)}</div>
+      <div className="text-xs text-[#86868B] flex-shrink-0">{formatDuration(track.duration)}</div>
     </div>
   )
 }

@@ -73,7 +73,7 @@ export interface MusicTrack {
 
 export interface MusicSelection {
   mode: 'ai' | 'manual' | 'upload'
-  track?: MusicTrack
+  trackId?: string
   uploadedFileId?: string
   volume: number
   fadeIn: number

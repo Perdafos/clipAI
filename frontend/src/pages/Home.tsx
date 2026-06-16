@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Scissors, Sparkles, Music, Download, Zap, ChevronRight, Youtube, Instagram } from 'lucide-react'
+import { ArrowRight, Sparkles, Music, Download, Youtube, Instagram } from 'lucide-react'
 import { detectPlatform } from '../types'
 import { useVideoStore } from '../stores'
-
-
 
 export function Home() {
   const navigate = useNavigate()
@@ -27,55 +25,52 @@ export function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0F0F1A] text-white overflow-hidden">
-      {/* Ambient glow */}
-      <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-violet-600/10 blur-[120px] rounded-full" />
-        <div className="absolute bottom-0 right-0 w-[500px] h-[300px] bg-cyan-500/8 blur-[100px] rounded-full" />
-      </div>
-
+    <div className="min-h-screen bg-white text-[#1D1D1F]">
       {/* Header */}
-      <header className="relative z-10 flex items-center justify-between px-6 py-5 max-w-6xl mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
-            <Scissors className="w-4 h-4 text-white" />
+      <header className="apple-blur sticky top-0 z-20 border-b border-black/[0.06]">
+        <div className="max-w-5xl mx-auto px-6 h-12 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#0071E3] to-[#5856D6] flex items-center justify-center shadow-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/>
+              </svg>
+            </div>
+            <span className="text-sm font-semibold tracking-tight">ClipAI</span>
           </div>
-          <span className="text-lg font-bold tracking-tight">ClipAI</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-slate-400">
-          <Sparkles className="w-4 h-4 text-violet-400" />
-          <span>Powered by 9router AI</span>
+          <div className="flex items-center gap-2 text-xs text-[#6E6E73]">
+            <Sparkles className="w-3 h-3 text-[#0071E3]" />
+            <span>AI-powered</span>
+          </div>
         </div>
       </header>
 
       {/* Hero */}
-      <main className="relative z-10 flex flex-col items-center justify-center px-6 pt-16 pb-32 text-center max-w-4xl mx-auto">
+      <main className="px-6 pt-20 pb-32 text-center max-w-2xl mx-auto">
         {/* Badge */}
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 text-sm font-medium mb-8">
-          <Zap className="w-3.5 h-3.5" />
-          <span>8 AI Models · Auto Clip · Smart Music</span>
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#F5F5F7] text-[#6E6E73] text-xs font-medium mb-8 border border-black/[0.04]">
+          <div className="w-1.5 h-1.5 rounded-full bg-[#34C759]" />
+          8 AI Models · Smart Music
         </div>
 
         {/* Headline */}
-        <h1 className="text-5xl sm:text-6xl font-black tracking-tight leading-[1.1] mb-6">
+        <h1 className="text-[40px] sm:text-[56px] font-bold tracking-tight leading-[1.05] mb-5 text-[#1D1D1F]">
           Paste a link.
           <br />
-          <span className="bg-gradient-to-r from-violet-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-[#0071E3] to-[#5856D6] bg-clip-text text-transparent">
             Get a viral clip.
           </span>
         </h1>
 
-        <p className="text-lg text-slate-400 max-w-xl mb-12 leading-relaxed">
-          Drop any YouTube, TikTok, or Instagram video. Our AI analyzes every scene,
-          selects the best moments, adds the perfect music, and exports a ready-to-share clip.
+        <p className="text-lg text-[#6E6E73] max-w-md mx-auto mb-10 leading-relaxed font-normal">
+          Drop any YouTube, TikTok, or Instagram video. AI analyzes every scene, selects the best moments, adds music, and exports a ready-to-share clip.
         </p>
 
         {/* URL Input */}
-        <div className="w-full max-w-2xl">
-          <div className={`flex gap-2 p-2 rounded-2xl border transition-all duration-200 ${
+        <div className="w-full max-w-xl mx-auto">
+          <div className={`flex gap-2 p-1.5 rounded-2xl border transition-all duration-200 bg-white ${
             error
-              ? 'border-red-500/50 bg-red-500/5'
-              : 'border-white/10 bg-white/5 focus-within:border-violet-500/50 focus-within:bg-violet-500/5'
+              ? 'border-[#FF3B30]/50 shadow-sm shadow-[#FF3B30]/5'
+              : 'border-[#D2D2D7] shadow-sm hover:shadow-md focus-within:border-[#0071E3] focus-within:shadow-[0_0_0_3px_rgba(0,113,227,0.12)]'
           }`}>
             <input
               type="url"
@@ -83,27 +78,27 @@ export function Home() {
               onChange={(e) => { setInput(e.target.value); setError('') }}
               onKeyDown={handleKeyDown}
               placeholder="Paste YouTube, TikTok, or Instagram URL..."
-              className="flex-1 bg-transparent text-white placeholder:text-slate-500 px-4 py-3 outline-none text-base"
+              className="flex-1 bg-transparent text-[#1D1D1F] placeholder:text-[#86868B] px-4 py-3.5 outline-none text-base"
               autoFocus
             />
             <button
               onClick={handleSubmit}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-violet-600 to-violet-500 hover:from-violet-500 hover:to-violet-400 text-white font-semibold rounded-xl transition-all duration-200 text-sm whitespace-nowrap shadow-lg shadow-violet-500/25"
+              className="flex items-center gap-1.5 px-5 py-3.5 bg-[#0071E3] hover:bg-[#0077ED] active:bg-[#0068D1] text-white font-medium rounded-xl transition-all text-sm whitespace-nowrap shadow-sm"
             >
               Generate Clip
-              <ChevronRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4" />
             </button>
           </div>
-          {error && <p className="mt-2 text-sm text-red-400 text-left pl-2">{error}</p>}
+          {error && <p className="mt-2 text-sm text-[#FF3B30] text-left pl-2">{error}</p>}
 
           {/* Platform chips */}
-          <div className="flex items-center justify-center gap-3 mt-4">
+          <div className="flex items-center justify-center gap-4 mt-4">
             {[
-              { icon: Youtube, label: 'YouTube', color: 'text-red-400' },
-              { icon: () => <span className="text-base">TT</span>, label: 'TikTok', color: 'text-slate-300' },
-              { icon: Instagram, label: 'Instagram', color: 'text-pink-400' },
+              { icon: Youtube, label: 'YouTube', color: 'text-[#FF0000]' },
+              { icon: () => <span className="text-xs font-bold">TT</span>, label: 'TikTok', color: 'text-[#1D1D1F]' },
+              { icon: Instagram, label: 'Instagram', color: 'text-[#E4405F]' },
             ].map(({ icon: Icon, label, color }) => (
-              <div key={label} className={`flex items-center gap-1.5 text-xs ${color} opacity-60`}>
+              <div key={label} className={`flex items-center gap-1 text-xs ${color} opacity-50`}>
                 <Icon className="w-3.5 h-3.5" />
                 <span>{label}</span>
               </div>
@@ -112,43 +107,46 @@ export function Home() {
         </div>
 
         {/* Features Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-20 w-full max-w-3xl">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-20 w-full max-w-2xl mx-auto">
           {[
             {
               icon: Sparkles,
               title: 'AI Scene Detection',
-              desc: 'Identifies the most engaging moments using 8 specialized AI models',
-              color: 'from-violet-500/20 to-violet-500/5',
-              iconColor: 'text-violet-400',
+              desc: 'Identifies engaging moments using 8 specialized models',
+              color: 'from-blue-50 to-blue-50/30',
+              iconBg: 'bg-[#0071E3]',
+              iconColor: 'text-white',
             },
             {
               icon: Music,
               title: 'Smart Music Match',
-              desc: 'AI picks music that perfectly matches your video mood and energy',
-              color: 'from-cyan-500/20 to-cyan-500/5',
-              iconColor: 'text-cyan-400',
+              desc: 'AI picks music that matches your video mood and energy',
+              color: 'from-indigo-50 to-indigo-50/30',
+              iconBg: 'bg-[#5856D6]',
+              iconColor: 'text-white',
             },
             {
               icon: Download,
               title: 'Instant Export',
-              desc: 'Download your clip in HD MP4, ready for any social platform',
-              color: 'from-emerald-500/20 to-emerald-500/5',
-              iconColor: 'text-emerald-400',
+              desc: 'Download your clip in HD, ready for any social platform',
+              color: 'from-emerald-50 to-emerald-50/30',
+              iconBg: 'bg-[#34C759]',
+              iconColor: 'text-white',
             },
-          ].map(({ icon: Icon, title, desc, color, iconColor }) => (
-            <div key={title} className={`p-5 rounded-2xl bg-gradient-to-b ${color} border border-white/5 text-left`}>
-              <div className={`w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center mb-3 ${iconColor}`}>
+          ].map(({ icon: Icon, title, desc, color, iconBg, iconColor }) => (
+            <div key={title} className={`p-5 rounded-2xl bg-gradient-to-b ${color} border border-black/[0.04] text-left`}>
+              <div className={`w-9 h-9 rounded-xl ${iconBg} ${iconColor} flex items-center justify-center mb-3 shadow-sm`}>
                 <Icon className="w-5 h-5" />
               </div>
-              <h3 className="font-semibold text-white mb-1 text-sm">{title}</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">{desc}</p>
+              <h3 className="font-semibold text-[#1D1D1F] mb-1 text-sm">{title}</h3>
+              <p className="text-xs text-[#6E6E73] leading-relaxed">{desc}</p>
             </div>
           ))}
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 text-center pb-6 text-xs text-slate-600">
+      <footer className="text-center pb-8 text-xs text-[#86868B] border-t border-black/[0.06] pt-6">
         © 2026 Perdafos. All rights reserved.
       </footer>
     </div>

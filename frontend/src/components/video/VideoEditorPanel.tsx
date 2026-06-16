@@ -13,13 +13,13 @@ interface VideoEditorPanelProps {
 }
 
 const CLIP_TYPE_COLORS: Record<string, string> = {
-  dunk: '#f43f5e',
-  ankle_breaker: '#f97316',
-  block: '#8b5cf6',
-  steal: '#06b6d4',
-  three_pointer: '#10b981',
-  highlight: '#6366f1',
-  other: '#64748b',
+  dunk: '#FF3B30',
+  ankle_breaker: '#FF9500',
+  block: '#5856D6',
+  steal: '#007AFF',
+  three_pointer: '#34C759',
+  highlight: '#0071E3',
+  other: '#86868B',
 }
 
 const CLIP_TYPE_LABELS: Record<string, string> = {
@@ -43,7 +43,6 @@ function buildEditedClips(resultData: WSCompleteData, videoDuration: number): Ed
       score: c.score || 0.85,
     }))
   }
-  // Generate mock segments from duration
   const types: EditedClip['type'][] = ['dunk', 'ankle_breaker', 'three_pointer', 'block', 'steal', 'highlight']
   const numSegs = Math.min(5, Math.max(2, Math.floor(videoDuration / 15)))
   const segs: EditedClip[] = []
@@ -73,7 +72,6 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
   const [isMuted, setIsMuted] = useState(false)
   const [zoom, setZoom] = useState(1)
 
-  // Selective store subscriptions — avoid full-store destructure re-renders
   const timelineClips = useClipStore(s => s.timelineClips)
   const selectedClipId = useClipStore(s => s.selectedClipId)
   const historyIndex = useClipStore(s => s.historyIndex)
@@ -89,7 +87,6 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
   const apiBase = import.meta.env.VITE_API_BASE_URL || ''
   const videoUrl = apiBase ? `${apiBase}${resultData.downloadUrl}` : resultData.downloadUrl
 
-  // Init timeline on mount
   useEffect(() => {
     const clips = buildEditedClips(resultData, videoDuration)
     if (useClipStore.getState().timelineClips.length === 0) {
@@ -97,23 +94,19 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
     }
   }, [resultData, videoDuration, initTimeline])
 
-  // Video event listeners
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
-
     const onTimeUpdate = () => { v.currentTime && setCurrentTime(v.currentTime) }
     const onDurationChange = () => setDuration(v.duration || videoDuration)
     const onPlay = () => setIsPlaying(true)
     const onPause = () => setIsPlaying(false)
     const onEnded = () => setIsPlaying(false)
-
     v.addEventListener('timeupdate', onTimeUpdate)
     v.addEventListener('durationchange', onDurationChange)
     v.addEventListener('play', onPlay)
     v.addEventListener('pause', onPause)
     v.addEventListener('ended', onEnded)
-
     return () => {
       v.removeEventListener('timeupdate', onTimeUpdate)
       v.removeEventListener('durationchange', onDurationChange)
@@ -123,7 +116,6 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
     }
   }, [videoDuration])
 
-  // Keep ref in sync for stable keyboard handler
   currentTimeRef.current = currentTime
   const selectedClipIdRef = useRef(selectedClipId)
   selectedClipIdRef.current = selectedClipId
@@ -141,7 +133,6 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
     v.currentTime = Math.max(0, Math.min(time, duration))
   }, [duration])
 
-  // Stable skip — reads ref instead of closure currentTime
   const skip = useCallback((sec: number) => {
     seekTo(currentTimeRef.current + sec)
   }, [seekTo])
@@ -168,8 +159,7 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      const ext = resultData.downloadUrl.endsWith('.mp4') ? '.mp4' : '.mp4'
-      a.download = `${resultData.videoTitle || 'clipai-highlight'}${ext}`
+      a.download = `${resultData.videoTitle || 'clipai-highlight'}.mp4`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -179,25 +169,19 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
     }
   }
 
-  // Check if any clip spans the current playhead position (memoized)
   const clipAtPlayhead = useMemo(
     () => timelineClips.some(c => c.start < currentTime && c.end > currentTime),
     [timelineClips, currentTime]
   )
 
-  // Keyboard shortcuts — stable effect, reads refs
   const keyboardHandlerRef = useRef<((e: KeyboardEvent) => void) | null>(null)
   keyboardHandlerRef.current = (e: KeyboardEvent) => {
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
     switch (e.key) {
-      case ' ':
-        e.preventDefault(); togglePlay(); break
-      case 'ArrowLeft':
-        e.preventDefault(); skip(-5); break
-      case 'ArrowRight':
-        e.preventDefault(); skip(5); break
-      case 's': case 'S':
-        e.preventDefault(); splitClip(currentTimeRef.current); break
+      case ' ': e.preventDefault(); togglePlay(); break
+      case 'ArrowLeft': e.preventDefault(); skip(-5); break
+      case 'ArrowRight': e.preventDefault(); skip(5); break
+      case 's': case 'S': e.preventDefault(); splitClip(currentTimeRef.current); break
       case 'Delete': case 'Backspace':
         if (selectedClipIdRef.current) { e.preventDefault(); deleteClip(selectedClipIdRef.current) }
         break
@@ -211,7 +195,7 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
     const handler = (e: KeyboardEvent) => keyboardHandlerRef.current?.(e)
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, []) // stable — intentionally empty, reads refs
+  }, [])
 
   const progress = currentTime > 0 ? (currentTime / duration) * 100 : 0
   const qualityPct = Math.round(resultData.qualityScore * 100)
@@ -223,15 +207,14 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
 
   return (
     <div className="space-y-4">
-      {/* ── AI Overview ──────────────────────────────────────── */}
       {resultData.overview && (
-        <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
-          <p className="text-xs text-slate-300 leading-relaxed">{resultData.overview}</p>
+        <div className="rounded-xl bg-[#0071E3]/5 border border-[#0071E3]/10 p-4">
+          <p className="text-xs text-[#6E6E73] leading-relaxed">{resultData.overview}</p>
         </div>
       )}
 
-      {/* ── Video Player ──────────────────────────────────────── */}
-      <div className="rounded-2xl overflow-hidden border border-white/8 bg-black relative group">
+      {/* Video Player */}
+      <div className="rounded-2xl overflow-hidden border border-black/[0.06] bg-[#F5F5F7] relative group">
         <video
           ref={videoRef}
           src={videoUrl}
@@ -241,91 +224,54 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
           style={{ cursor: 'pointer' }}
         />
 
-        {/* Overlay controls */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
 
-        {/* Play overlay */}
         {!isPlaying && (
-          <button
-            onClick={togglePlay}
-            className="absolute inset-0 flex items-center justify-center"
-          >
+          <button onClick={togglePlay} className="absolute inset-0 flex items-center justify-center">
             <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center hover:bg-white/30 transition-all hover:scale-105">
               <Play className="w-7 h-7 text-white fill-white ml-1" />
             </div>
           </button>
         )}
 
-        {/* Quality badge */}
-        <div className="absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-amber-400/20 border border-amber-400/30 text-amber-400 text-xs font-bold pointer-events-none">
-          <Star className="w-3 h-3 fill-amber-400" />
+        <div className="absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/90 text-[#FF9500] text-xs font-bold pointer-events-none shadow-sm">
+          <Star className="w-3 h-3 fill-[#FF9500]" />
           {qualityPct}%
         </div>
 
-        {/* Bottom controls */}
-        <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-8 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          {/* Timeline seek bar */}
+        <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-8 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           <DraggableTimeline
             duration={duration}
             segments={timelineClips}
             onSeek={seekTo}
             progress={progress}
           />
-
-          {/* Controls */}
           <div className="flex items-center gap-1.5">
-            {/* Skip -10 */}
             <button onClick={() => skip(-10)} className="text-white/60 hover:text-white transition-colors p-1" title="-10s">
               <SkipBack className="w-4 h-4" />
             </button>
-            {/* Skip -5 */}
-            <button onClick={() => skip(-5)} className="text-white/60 hover:text-white transition-colors p-1 text-[10px] font-bold" title="-5s">
-              -5
-            </button>
-
+            <button onClick={() => skip(-5)} className="text-white/60 hover:text-white transition-colors p-1 text-[10px] font-bold" title="-5s">-5</button>
             <button onClick={togglePlay} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all mx-1">
               {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
             </button>
-
-            {/* Skip +5 */}
-            <button onClick={() => skip(5)} className="text-white/60 hover:text-white transition-colors p-1 text-[10px] font-bold" title="+5s">
-              +5
-            </button>
-            {/* Skip +10 */}
+            <button onClick={() => skip(5)} className="text-white/60 hover:text-white transition-colors p-1 text-[10px] font-bold" title="+5s">+5</button>
             <button onClick={() => skip(10)} className="text-white/60 hover:text-white transition-colors p-1" title="+10s">
               <SkipForward className="w-4 h-4" />
             </button>
-
             <span className="text-[11px] text-white/70 tabular-nums ml-2 font-mono">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
-
-            {/* Clip-at-playhead indicator */}
             {clipAtPlayhead && (
-              <div className="ml-2 px-1.5 py-0.5 rounded bg-violet-500/30 text-[9px] text-violet-300 font-medium">
-                Snip
-              </div>
+              <div className="ml-2 px-1.5 py-0.5 rounded bg-[#0071E3]/40 text-[9px] text-blue-200 font-medium">Snip</div>
             )}
-
             <div className="ml-auto flex items-center gap-3">
               <div className="flex items-center gap-1.5">
                 <button onClick={toggleMute} className="text-white/60 hover:text-white transition-colors p-1">
                   {isMuted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
                 </button>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.1}
-                  value={isMuted ? 0 : volume}
-                  onChange={e => changeVolume(Number(e.target.value))}
-                  className="w-14 accent-violet-500 h-1"
-                />
+                <input type="range" min={0} max={1} step={0.1} value={isMuted ? 0 : volume} onChange={e => changeVolume(Number(e.target.value))} className="w-14 accent-[#0071E3] h-1" />
               </div>
-              <button
-                onClick={() => videoRef.current?.requestFullscreen()}
-                className="text-white/60 hover:text-white transition-colors p-1"
-              >
+              <button onClick={() => videoRef.current?.requestFullscreen()} className="text-white/60 hover:text-white transition-colors p-1">
                 <Maximize2 className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -333,31 +279,30 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
         </div>
       </div>
 
-      {/* ── Stats ──────────────────────────────────────────────── */}
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         {[
           { icon: Clock, label: 'Duration', value: formatDuration(resultData.duration) },
           { icon: FileVideo, label: 'File Size', value: formatFileSize(resultData.fileSize) },
           { icon: Star, label: 'AI Score', value: `${qualityPct}/100` },
         ].map(({ icon: Icon, label, value }) => (
-          <div key={label} className="p-3 rounded-xl bg-white/4 border border-white/6 text-center">
-            <Icon className="w-4 h-4 text-slate-400 mx-auto mb-1" />
-            <div className="text-sm font-semibold text-white">{value}</div>
-            <div className="text-xs text-slate-500">{label}</div>
+          <div key={label} className="p-3 rounded-xl bg-[#F5F5F7] border border-black/[0.04] text-center">
+            <Icon className="w-4 h-4 text-[#86868B] mx-auto mb-1" />
+            <div className="text-sm font-semibold text-[#1D1D1F]">{value}</div>
+            <div className="text-xs text-[#86868B]">{label}</div>
           </div>
         ))}
       </div>
 
-      {/* ── Keyboard Hints ────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-2 text-[10px] text-slate-600">
-        <span><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">Space</kbd> Play/Pause</span>
-        <span><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">←</kbd><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">→</kbd> Skip 5s</span>
-        <span><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">S</kbd> Split</span>
-        <span><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">Del</kbd> Delete clip</span>
-        <span><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">^Z</kbd> Undo</span>
+      {/* Keyboard hints */}
+      <div className="flex flex-wrap gap-2 text-[10px] text-[#86868B]">
+        <span><kbd className="px-1 py-0.5 rounded bg-[#F5F5F7] font-mono border border-black/[0.06]">Space</kbd> Play/Pause</span>
+        <span><kbd className="px-1 py-0.5 rounded bg-[#F5F5F7] font-mono border border-black/[0.06]">←</kbd><kbd className="px-1 py-0.5 rounded bg-[#F5F5F7] font-mono border border-black/[0.06]">→</kbd> Skip 5s</span>
+        <span><kbd className="px-1 py-0.5 rounded bg-[#F5F5F7] font-mono border border-black/[0.06]">S</kbd> Split</span>
+        <span><kbd className="px-1 py-0.5 rounded bg-[#F5F5F7] font-mono border border-black/[0.06]">Del</kbd> Delete clip</span>
+        <span><kbd className="px-1 py-0.5 rounded bg-[#F5F5F7] font-mono border border-black/[0.06]">^Z</kbd> Undo</span>
       </div>
 
-      {/* ── Edit Toolbar ────────────────────────────────────────── */}
       <EditToolbar
         currentTime={currentTime}
         onSplit={() => splitClip(currentTime)}
@@ -372,7 +317,6 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
         hasSelectedClip={!!selectedClipId}
       />
 
-      {/* ── Timeline Editor ──────────────────────────────────────── */}
       <TimelineEditor
         clips={timelineClips}
         currentTime={currentTime}
@@ -385,18 +329,17 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
         onSelectClip={selectClip}
       />
 
-      {/* ── Actions ────────────────────────────────────────────── */}
       <div className="flex gap-3">
         <button
           onClick={handleDownload}
-          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white font-semibold text-sm transition-all shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:scale-[1.02]"
+          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-[#0071E3] to-[#5856D6] hover:from-[#0077ED] hover:to-[#5E5CDE] text-white font-semibold text-sm transition-all shadow-sm"
         >
           <Download className="w-4 h-4" />
           Download Clip
         </button>
         <button
           onClick={() => navigator.clipboard?.writeText(window.location.origin + resultData.downloadUrl)}
-          className="flex items-center gap-2 px-5 py-3.5 rounded-xl border border-white/10 bg-white/4 hover:bg-white/8 text-white text-sm font-medium transition-all"
+          className="flex items-center gap-2 px-5 py-3.5 rounded-xl border border-[#D2D2D7] bg-white hover:bg-[#F5F5F7] text-[#1D1D1F] text-sm font-medium transition-all"
         >
           <Share2 className="w-4 h-4" />
           Share
@@ -406,12 +349,8 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
   )
 }
 
-// ─── Draggable timeline sub-component (used in player overlay) ──
 function DraggableTimeline({
-  duration,
-  segments,
-  onSeek,
-  progress,
+  duration, segments, onSeek, progress,
 }: {
   duration: number
   segments: EditedClip[]
@@ -436,12 +375,8 @@ function DraggableTimeline({
 
   useEffect(() => {
     if (!isDragging) return
-
-    const onMove = (e: MouseEvent) => {
-      onSeek(getTimeFromClientX(e.clientX))
-    }
+    const onMove = (e: MouseEvent) => onSeek(getTimeFromClientX(e.clientX))
     const onUp = () => setIsDragging(false)
-
     document.addEventListener('mousemove', onMove)
     document.addEventListener('mouseup', onUp)
     return () => {
@@ -453,10 +388,9 @@ function DraggableTimeline({
   return (
     <div
       ref={timelineRef}
-      className="relative h-[5px] bg-white/15 rounded-full cursor-pointer mb-[6px] hover:h-[7px] transition-all group"
+      className="relative h-[5px] bg-white/20 rounded-full cursor-pointer mb-[6px] hover:h-[7px] transition-all group"
       onMouseDown={handleMouseDown}
     >
-      {/* Segment markers */}
       {segments.map(seg => (
         <div
           key={seg.id}
@@ -464,16 +398,14 @@ function DraggableTimeline({
           style={{
             left: `${(seg.start / duration) * 100}%`,
             width: `${((seg.end - seg.start) / duration) * 100}%`,
-            background: CLIP_TYPE_COLORS[seg.type] || '#6366f1',
+            background: CLIP_TYPE_COLORS[seg.type] || '#0071E3',
           }}
         />
       ))}
-      {/* Progress fill */}
       <div
-        className="absolute left-0 top-0 h-full bg-violet-500 rounded-full transition-all duration-75"
+        className="absolute left-0 top-0 h-full bg-white rounded-full transition-all duration-75"
         style={{ width: `${progress}%` }}
       />
-      {/* Playhead dot */}
       <div
         className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow-lg transition-transform ${isDragging ? 'scale-125' : ''}`}
         style={{ left: `calc(${progress}% - 5px)` }}
