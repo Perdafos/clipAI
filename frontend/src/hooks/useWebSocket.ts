@@ -10,7 +10,8 @@ export function useWebSocket(jobId: string | null) {
 
   const connect = useCallback(() => {
     if (!jobId) return
-    const wsBase = import.meta.env.VITE_WS_URL || 'ws://localhost:3001'
+    const apiBase = import.meta.env.VITE_API_BASE_URL || ''
+    const wsBase = import.meta.env.VITE_WS_URL || (apiBase ? apiBase.replace('https://', 'wss://') : `ws://${window.location.hostname}:2121`)
     const ws = new WebSocket(`${wsBase}/ws/${jobId}`)
     wsRef.current = ws
 

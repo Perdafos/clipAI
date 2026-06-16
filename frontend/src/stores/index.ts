@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { VideoMetadata, Platform, ClipConfig, MusicSelection, MusicTrack, JobStatus, WSCompleteData, EditedClip, ClipType } from '../types'
+import type { VideoMetadata, Platform, ClipConfig, MusicSelection, MusicTrack, JobStatus, WSCompleteData, EditedClip } from '../types'
 
 // ─── Video Store ──────────────────────────────────────────────────
 interface VideoState {

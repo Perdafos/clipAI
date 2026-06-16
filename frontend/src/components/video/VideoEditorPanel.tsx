@@ -86,8 +86,8 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
   const undo = useClipStore(s => s.undo)
   const redo = useClipStore(s => s.redo)
 
-  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'
-  const videoUrl = `${apiBase}${resultData.downloadUrl}`
+  const apiBase = import.meta.env.VITE_API_BASE_URL || ''
+  const videoUrl = apiBase ? `${apiBase}${resultData.downloadUrl}` : resultData.downloadUrl
 
   // Init timeline on mount
   useEffect(() => {
@@ -160,14 +160,23 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
     setVolume(val)
   }
 
-  const handleDownload = () => {
-    const a = document.createElement('a')
-    a.href = videoUrl
-    const ext = resultData.downloadUrl.endsWith('.mp4') ? '.mp4' : '.mp4'
-    a.download = `${resultData.videoTitle || 'clipai-highlight'}${ext}`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+  const handleDownload = async () => {
+    try {
+      const resp = await fetch(videoUrl)
+      if (!resp.ok) throw new Error('Download failed')
+      const blob = await resp.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const ext = resultData.downloadUrl.endsWith('.mp4') ? '.mp4' : '.mp4'
+      a.download = `${resultData.videoTitle || 'clipai-highlight'}${ext}`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Download failed:', err)
+    }
   }
 
   // Check if any clip spans the current playhead position (memoized)
@@ -257,7 +266,6 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
         <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-8 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           {/* Timeline seek bar */}
           <DraggableTimeline
-            currentTime={currentTime}
             duration={duration}
             segments={timelineClips}
             onSeek={seekTo}
@@ -387,7 +395,7 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
           Download Clip
         </button>
         <button
-          onClick={() => navigator.clipboard?.writeText(import.meta.env.VITE_API_BASE_URL + resultData.downloadUrl)}
+          onClick={() => navigator.clipboard?.writeText(window.location.origin + resultData.downloadUrl)}
           className="flex items-center gap-2 px-5 py-3.5 rounded-xl border border-white/10 bg-white/4 hover:bg-white/8 text-white text-sm font-medium transition-all"
         >
           <Share2 className="w-4 h-4" />
@@ -400,13 +408,11 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
 
 // ─── Draggable timeline sub-component (used in player overlay) ──
 function DraggableTimeline({
-  currentTime,
   duration,
   segments,
   onSeek,
   progress,
 }: {
-  currentTime: number
   duration: number
   segments: EditedClip[]
   onSeek: (t: number) => void

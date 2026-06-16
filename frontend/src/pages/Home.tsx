@@ -146,6 +146,11 @@ export function Home() {
           ))}
         </div>
       </main>
+
+      {/* Footer */}
+      <footer className="relative z-10 text-center pb-6 text-xs text-slate-600">
+        © 2026 Perdafos. All rights reserved.
+      </footer>
     </div>
   )
 }

@@ -269,6 +269,11 @@ export function Studio() {
           </div>
         )}
       </div>
+
+      {/* Footer */}
+      <footer className="relative z-10 text-center py-4 text-xs text-slate-600 border-t border-white/5">
+        © 2026 Perdafos. All rights reserved.
+      </footer>
     </div>
   )
 }
