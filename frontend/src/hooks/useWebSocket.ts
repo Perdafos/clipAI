@@ -16,7 +16,6 @@ export function useWebSocket(jobId: string | null) {
 
     ws.onopen = () => {
       retryCountRef.current = 0
-      console.log(`[WS] Connected to job ${jobId}`)
     }
 
     ws.onmessage = (event) => {
@@ -36,18 +35,18 @@ export function useWebSocket(jobId: string | null) {
           )
         }
       } catch {
-        console.error('[WS] Failed to parse message:', event.data)
+        // silent parse error
       }
     }
 
-    ws.onerror = () => console.error(`[WS] Error on job ${jobId}`)
+    ws.onerror = () => { /* silent */ }
 
     ws.onclose = (e) => {
       if (e.code === 1000) return // Normal close
       if (retryCountRef.current < 5) {
         const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000)
         retryCountRef.current++
-        console.log(`[WS] Reconnecting in ${delay}ms (attempt ${retryCountRef.current})`)
+        // silent reconnect
         retryTimerRef.current = setTimeout(connect, delay)
       } else {
         setError('Lost connection to server. Please refresh and try again.')

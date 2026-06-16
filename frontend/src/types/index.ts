@@ -144,6 +144,22 @@ export interface MusicRecommendResponse {
   alternatives: MusicTrack[]
 }
 
+// ─── Timeline Editor ────────────────────────────────────────────
+export interface EditedClip {
+  id: string
+  start: number
+  end: number
+  title: string
+  type: ClipType
+  score: number
+}
+
+export interface TimelineState {
+  clips: EditedClip[]
+  selectedClipId: string | null
+  cutPoints: number[]
+}
+
 // ─── URL Validation ──────────────────────────────────────────────
 export const URL_PATTERNS = {
   youtube: /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/)[\w-]{11}/,

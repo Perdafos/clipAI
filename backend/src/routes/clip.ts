@@ -65,9 +65,13 @@ exportRouter.get('/:jobId', (c) => {
   })
 })
 
-// DELETE /api/job/:jobId - Manual cleanup
+// DELETE /api/job/:jobId - Manual cleanup (files + store)
 exportRouter.delete('/job/:jobId', (c) => {
   const { jobId } = c.req.param()
+  const jobDir = `./uploads/${jobId}`
+  if (fs.existsSync(jobDir)) {
+    fs.rmSync(jobDir, { recursive: true, force: true })
+  }
   jobStore.delete(jobId)
   return c.json({ success: true, data: { deleted: true }, error: null, requestId: uuidv4() })
 })

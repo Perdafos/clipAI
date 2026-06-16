@@ -4,6 +4,7 @@ import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
 import { createServer } from 'http'
 import { WebSocketServer } from 'ws'
+import path from 'path'
 import videoRoutes from './routes/video'
 import clipRoutes from './routes/clip'
 import musicRoutes from './routes/music'
@@ -12,10 +13,27 @@ import { wsHandler } from './routes/ws'
 import fs from 'fs'
 
 // Ensure required directories exist
-const dirs = ['./uploads', './temp', './public/music']
+const dirs = ['./uploads', './public/music']
 dirs.forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 })
+
+// Cleanup stale job dirs on startup (keep sample_template.mp4)
+console.log('[ClipAI] Cleaning stale uploads from previous sessions...')
+let cleanedCount = 0
+if (fs.existsSync('./uploads')) {
+  const entries = fs.readdirSync('./uploads', { withFileTypes: true })
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const jobDir = path.join('./uploads', entry.name)
+      fs.rmSync(jobDir, { recursive: true, force: true })
+      cleanedCount++
+    }
+  }
+}
+if (cleanedCount > 0) {
+  console.log(`[ClipAI] Cleaned ${cleanedCount} stale job upload(s)`)
+}
 
 const app = new Hono()
 

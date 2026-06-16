@@ -1,5 +1,5 @@
 import { WebSocket } from 'ws'
-import { downloadVideo, createJobDir, hasFfmpeg, ffmpegPath } from '../services/videoService'
+import { downloadVideo, createJobDir, cleanupJob, hasFfmpeg, ffmpegPath } from '../services/videoService'
 import { generateFFmpegCommand, scoreClipQuality } from '../services/aiService'
 import { exec } from 'child_process'
 import { promisify } from 'util'
@@ -370,10 +370,10 @@ export async function processJob(
       })),
     })
 
-    // Schedule cleanup in 1 hour
+    // Schedule cleanup in 1 hour (files + job store)
     setTimeout(() => {
-      const { cleanupJob } = require('../services/videoService')
       cleanupJob(jobId)
+      jobStore.delete(jobId)
     }, 60 * 60 * 1000)
 
   } catch (err: unknown) {

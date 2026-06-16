@@ -1,18 +1,10 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { Play, Pause, Volume2, VolumeX, Maximize2, SkipBack, SkipForward, Download, Share2, Star, Clock, FileVideo, Scissors, ChevronRight, Zap } from 'lucide-react'
-import type { WSCompleteData } from '../../types'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { Play, Pause, Volume2, VolumeX, Maximize2, Download, Share2, Star, Clock, FileVideo, SkipBack, SkipForward } from 'lucide-react'
+import type { WSCompleteData, EditedClip } from '../../types'
 import { formatDuration, formatFileSize } from '../../types'
-
-interface ClipSegment {
-  id: string
-  start: number
-  end: number
-  label: string
-  title: string
-  type: 'dunk' | 'ankle_breaker' | 'block' | 'steal' | 'three_pointer' | 'highlight' | 'other'
-  score: number
-  reason?: string
-}
+import { useClipStore } from '../../stores'
+import { TimelineEditor } from './TimelineEditor'
+import { EditToolbar } from './EditToolbar'
 
 interface VideoEditorPanelProps {
   resultData: WSCompleteData
@@ -20,7 +12,7 @@ interface VideoEditorPanelProps {
   videoDuration?: number
 }
 
-const CLIP_TYPE_COLORS: Record<ClipSegment['type'], string> = {
+const CLIP_TYPE_COLORS: Record<string, string> = {
   dunk: '#f43f5e',
   ankle_breaker: '#f97316',
   block: '#8b5cf6',
@@ -30,94 +22,96 @@ const CLIP_TYPE_COLORS: Record<ClipSegment['type'], string> = {
   other: '#64748b',
 }
 
-const CLIP_TYPE_LABELS: Record<ClipSegment['type'], string> = {
-  dunk: '🏀 Dunk',
-  ankle_breaker: '⚡ Ankle Breaker',
-  block: '🛡️ Block',
-  steal: '✂️ Steal',
-  three_pointer: '🎯 3-Pointer',
-  highlight: '⭐ Highlight',
-  other: '📹 Clip',
+const CLIP_TYPE_LABELS: Record<string, string> = {
+  dunk: 'Dunk',
+  ankle_breaker: 'Ankle Breaker',
+  block: 'Block',
+  steal: 'Steal',
+  three_pointer: '3-Pointer',
+  highlight: 'Highlight',
+  other: 'Clip',
 }
 
-// Generate mock segments from resultData
-function generateSegments(duration: number): ClipSegment[] {
-  const types: ClipSegment['type'][] = ['dunk', 'ankle_breaker', 'three_pointer', 'block', 'steal', 'highlight']
-  const numSegs = Math.min(5, Math.max(2, Math.floor(duration / 15)))
-  const segments: ClipSegment[] = []
-  const segDur = duration / numSegs
-
-  for (let i = 0; i < numSegs; i++) {
-    const start = Math.floor(segDur * i)
-    const end = Math.floor(segDur * (i + 1))
-    segments.push({
-      id: `seg-${i}`,
-      start,
-      end,
-      label: `Clip ${i + 1}`,
-      title: `Clip ${i + 1}`,
-      type: types[i % types.length],
-      score: 0.7 + Math.random() * 0.3,
-    })
-  }
-  return segments
-}
-
-// Build segments from real clip data or generate from duration
-function buildSegments(resultData: VideoEditorPanelProps['resultData'], videoDuration: number): ClipSegment[] {
+function buildEditedClips(resultData: WSCompleteData, videoDuration: number): EditedClip[] {
   if (resultData.clips && resultData.clips.length > 0) {
     return resultData.clips.map((c, i) => ({
       id: `seg-${i}`,
       start: c.start,
       end: c.end,
-      label: `Clip ${i + 1}`,
-      title: c.title || CLIP_TYPE_LABELS[(c.clip_type as ClipSegment['type']) || 'highlight'] || `Clip ${i + 1}`,
-      type: (c.clip_type as ClipSegment['type']) || 'highlight',
+      title: c.title || CLIP_TYPE_LABELS[c.clip_type || 'highlight'] || `Clip ${i + 1}`,
+      type: (c.clip_type as EditedClip['type']) || 'highlight',
       score: c.score || 0.85,
-      reason: c.reason,
     }))
   }
-  return generateSegments(resultData.duration || videoDuration)
+  // Generate mock segments from duration
+  const types: EditedClip['type'][] = ['dunk', 'ankle_breaker', 'three_pointer', 'block', 'steal', 'highlight']
+  const numSegs = Math.min(5, Math.max(2, Math.floor(videoDuration / 15)))
+  const segs: EditedClip[] = []
+  const segDur = videoDuration / numSegs
+  for (let i = 0; i < numSegs; i++) {
+    const start = Math.floor(segDur * i)
+    const end = Math.floor(segDur * (i + 1))
+    segs.push({
+      id: `seg-${i}`,
+      start,
+      end,
+      title: `Clip ${i + 1}`,
+      type: types[i % types.length],
+      score: 0.7 + Math.random() * 0.3,
+    })
+  }
+  return segs
 }
 
 export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditorPanelProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const timelineRef = useRef<HTMLDivElement>(null)
+  const currentTimeRef = useRef(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(videoDuration)
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
-  const [activeSegment, setActiveSegment] = useState<string | null>(null)
-  const [segments] = useState<ClipSegment[]>(() => buildSegments(resultData, videoDuration))
-  const [selectedSegment, setSelectedSegment] = useState<ClipSegment | null>(null)
+  const [zoom, setZoom] = useState(1)
+
+  // Selective store subscriptions — avoid full-store destructure re-renders
+  const timelineClips = useClipStore(s => s.timelineClips)
+  const selectedClipId = useClipStore(s => s.selectedClipId)
+  const historyIndex = useClipStore(s => s.historyIndex)
+  const history = useClipStore(s => s.history)
+  const initTimeline = useClipStore(s => s.initTimeline)
+  const selectClip = useClipStore(s => s.selectClip)
+  const splitClip = useClipStore(s => s.splitClip)
+  const deleteClip = useClipStore(s => s.deleteClip)
+  const trimClip = useClipStore(s => s.trimClip)
+  const undo = useClipStore(s => s.undo)
+  const redo = useClipStore(s => s.redo)
 
   const videoUrl = `http://localhost:3001${resultData.downloadUrl}`
 
+  // Init timeline on mount
+  useEffect(() => {
+    const clips = buildEditedClips(resultData, videoDuration)
+    if (useClipStore.getState().timelineClips.length === 0) {
+      initTimeline(clips)
+    }
+  }, [resultData, videoDuration, initTimeline])
+
+  // Video event listeners
   useEffect(() => {
     const v = videoRef.current
     if (!v) return
 
-    const onTimeUpdate = () => {
-      setCurrentTime(v.currentTime)
-      // Find active segment
-      const active = segments.find(s => v.currentTime >= s.start && v.currentTime < s.end)
-      setActiveSegment(active?.id || null)
-    }
+    const onTimeUpdate = () => { v.currentTime && setCurrentTime(v.currentTime) }
     const onDurationChange = () => setDuration(v.duration || videoDuration)
     const onPlay = () => setIsPlaying(true)
     const onPause = () => setIsPlaying(false)
     const onEnded = () => setIsPlaying(false)
-    const onLoaded = () => { /* video loaded */ }
-    const onError = () => { console.error('Video failed to load') }
 
     v.addEventListener('timeupdate', onTimeUpdate)
     v.addEventListener('durationchange', onDurationChange)
     v.addEventListener('play', onPlay)
     v.addEventListener('pause', onPause)
     v.addEventListener('ended', onEnded)
-    v.addEventListener('loadeddata', onLoaded)
-    v.addEventListener('error', onError)
 
     return () => {
       v.removeEventListener('timeupdate', onTimeUpdate)
@@ -125,10 +119,13 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
       v.removeEventListener('play', onPlay)
       v.removeEventListener('pause', onPause)
       v.removeEventListener('ended', onEnded)
-      v.removeEventListener('loadeddata', onLoaded)
-      v.removeEventListener('error', onError)
     }
-  }, [segments, videoDuration])
+  }, [videoDuration])
+
+  // Keep ref in sync for stable keyboard handler
+  currentTimeRef.current = currentTime
+  const selectedClipIdRef = useRef(selectedClipId)
+  selectedClipIdRef.current = selectedClipId
 
   const togglePlay = useCallback(() => {
     const v = videoRef.current
@@ -143,16 +140,9 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
     v.currentTime = Math.max(0, Math.min(time, duration))
   }, [duration])
 
-  const handleTimelineClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect()
-    const ratio = (e.clientX - rect.left) / rect.width
-    seekTo(ratio * duration)
-  }, [duration, seekTo])
-
-  const jumpToSegment = useCallback((seg: ClipSegment) => {
-    seekTo(seg.start)
-    setSelectedSegment(seg)
-    videoRef.current?.play()
+  // Stable skip — reads ref instead of closure currentTime
+  const skip = useCallback((sec: number) => {
+    seekTo(currentTimeRef.current + sec)
   }, [seekTo])
 
   const toggleMute = () => {
@@ -178,9 +168,42 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
     document.body.removeChild(a)
   }
 
-  const qualityPct = Math.round(resultData.qualityScore * 100)
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
+  // Check if any clip spans the current playhead position (memoized)
+  const clipAtPlayhead = useMemo(
+    () => timelineClips.some(c => c.start < currentTime && c.end > currentTime),
+    [timelineClips, currentTime]
+  )
 
+  // Keyboard shortcuts — stable effect, reads refs
+  const keyboardHandlerRef = useRef<((e: KeyboardEvent) => void) | null>(null)
+  keyboardHandlerRef.current = (e: KeyboardEvent) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+    switch (e.key) {
+      case ' ':
+        e.preventDefault(); togglePlay(); break
+      case 'ArrowLeft':
+        e.preventDefault(); skip(-5); break
+      case 'ArrowRight':
+        e.preventDefault(); skip(5); break
+      case 's': case 'S':
+        e.preventDefault(); splitClip(currentTimeRef.current); break
+      case 'Delete': case 'Backspace':
+        if (selectedClipIdRef.current) { e.preventDefault(); deleteClip(selectedClipIdRef.current) }
+        break
+      case 'z': case 'Z':
+        if (e.ctrlKey || e.metaKey) { e.preventDefault(); if (e.shiftKey) redo(); else undo() }
+        break
+    }
+  }
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => keyboardHandlerRef.current?.(e)
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, []) // stable — intentionally empty, reads refs
+
+  const progress = currentTime > 0 ? (currentTime / duration) * 100 : 0
+  const qualityPct = Math.round(resultData.qualityScore * 100)
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60)
     const sec = Math.floor(s % 60)
@@ -189,22 +212,14 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
 
   return (
     <div className="space-y-4">
-
-      {/* ── AI Overview Summary ───────────────────────────────── */}
+      {/* ── AI Overview ──────────────────────────────────────── */}
       {resultData.overview && (
         <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <Zap className="w-3.5 h-3.5 text-violet-400" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-violet-300 mb-1">✨ AI Video Summary</p>
-              <p className="text-xs text-slate-300 leading-relaxed">{resultData.overview}</p>
-            </div>
-          </div>
+          <p className="text-xs text-slate-300 leading-relaxed">{resultData.overview}</p>
         </div>
       )}
-      {/* ── Video Player ─────────────────────────────────────────── */}
+
+      {/* ── Video Player ──────────────────────────────────────── */}
       <div className="rounded-2xl overflow-hidden border border-white/8 bg-black relative group">
         <video
           ref={videoRef}
@@ -216,9 +231,9 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
         />
 
         {/* Overlay controls */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
 
-        {/* Play button overlay */}
+        {/* Play overlay */}
         {!isPlaying && (
           <button
             onClick={togglePlay}
@@ -230,85 +245,62 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
           </button>
         )}
 
-        {/* Active segment badge */}
-        {activeSegment && (
-          <div className="absolute top-4 left-4 pointer-events-none">
-            {(() => {
-              const seg = segments.find(s => s.id === activeSegment)
-              if (!seg) return null
-              const color = CLIP_TYPE_COLORS[seg.type]
-              return (
-                <div
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold text-white animate-pulse"
-                  style={{ background: `${color}cc`, border: `1px solid ${color}` }}
-                >
-                  <Zap className="w-3 h-3" />
-                  {CLIP_TYPE_LABELS[seg.type]}
-                </div>
-              )
-            })()}
-          </div>
-        )}
-
         {/* Quality badge */}
         <div className="absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-amber-400/20 border border-amber-400/30 text-amber-400 text-xs font-bold pointer-events-none">
           <Star className="w-3 h-3 fill-amber-400" />
           {qualityPct}%
         </div>
 
-        {/* Bottom controls bar */}
-        <div className="absolute bottom-0 left-0 right-0 px-4 pb-4 pt-8 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          {/* Timeline */}
-          <div
-            ref={timelineRef}
-            className="relative h-1.5 bg-white/20 rounded-full cursor-pointer mb-3 hover:h-2.5 transition-all"
-            onClick={handleTimelineClick}
-          >
-            {/* Segment markers */}
-            {segments.map(seg => (
-              <div
-                key={seg.id}
-                className="absolute top-0 h-full opacity-60 rounded-sm"
-                style={{
-                  left: `${(seg.start / duration) * 100}%`,
-                  width: `${((seg.end - seg.start) / duration) * 100}%`,
-                  background: CLIP_TYPE_COLORS[seg.type],
-                }}
-              />
-            ))}
-            {/* Playhead */}
-            <div
-              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-lg transition-all"
-              style={{ left: `calc(${progress}% - 6px)` }}
-            />
-            {/* Progress fill */}
-            <div
-              className="absolute left-0 top-0 h-full bg-violet-500 rounded-full"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+        {/* Bottom controls */}
+        <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-8 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          {/* Timeline seek bar */}
+          <DraggableTimeline
+            currentTime={currentTime}
+            duration={duration}
+            segments={timelineClips}
+            onSeek={seekTo}
+            progress={progress}
+          />
 
-          {/* Controls row */}
-          <div className="flex items-center gap-3">
-            <button onClick={() => seekTo(currentTime - 10)} className="text-white/70 hover:text-white transition-colors">
+          {/* Controls */}
+          <div className="flex items-center gap-1.5">
+            {/* Skip -10 */}
+            <button onClick={() => skip(-10)} className="text-white/60 hover:text-white transition-colors p-1" title="-10s">
               <SkipBack className="w-4 h-4" />
             </button>
-            <button onClick={togglePlay} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all">
+            {/* Skip -5 */}
+            <button onClick={() => skip(-5)} className="text-white/60 hover:text-white transition-colors p-1 text-[10px] font-bold" title="-5s">
+              -5
+            </button>
+
+            <button onClick={togglePlay} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-all mx-1">
               {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white fill-white ml-0.5" />}
             </button>
-            <button onClick={() => seekTo(currentTime + 10)} className="text-white/70 hover:text-white transition-colors">
+
+            {/* Skip +5 */}
+            <button onClick={() => skip(5)} className="text-white/60 hover:text-white transition-colors p-1 text-[10px] font-bold" title="+5s">
+              +5
+            </button>
+            {/* Skip +10 */}
+            <button onClick={() => skip(10)} className="text-white/60 hover:text-white transition-colors p-1" title="+10s">
               <SkipForward className="w-4 h-4" />
             </button>
 
-            <span className="text-xs text-white/70 tabular-nums ml-1">
+            <span className="text-[11px] text-white/70 tabular-nums ml-2 font-mono">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
 
+            {/* Clip-at-playhead indicator */}
+            {clipAtPlayhead && (
+              <div className="ml-2 px-1.5 py-0.5 rounded bg-violet-500/30 text-[9px] text-violet-300 font-medium">
+                Snip
+              </div>
+            )}
+
             <div className="ml-auto flex items-center gap-3">
-              {/* Volume */}
-              <div className="flex items-center gap-2">
-                <button onClick={toggleMute} className="text-white/70 hover:text-white transition-colors">
-                  {isMuted || volume === 0 ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              <div className="flex items-center gap-1.5">
+                <button onClick={toggleMute} className="text-white/60 hover:text-white transition-colors p-1">
+                  {isMuted || volume === 0 ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
                 </button>
                 <input
                   type="range"
@@ -317,21 +309,21 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
                   step={0.1}
                   value={isMuted ? 0 : volume}
                   onChange={e => changeVolume(Number(e.target.value))}
-                  className="w-16 accent-violet-500"
+                  className="w-14 accent-violet-500 h-1"
                 />
               </div>
               <button
                 onClick={() => videoRef.current?.requestFullscreen()}
-                className="text-white/70 hover:text-white transition-colors"
+                className="text-white/60 hover:text-white transition-colors p-1"
               >
-                <Maximize2 className="w-4 h-4" />
+                <Maximize2 className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── Stats Row ─────────────────────────────────────────────── */}
+      {/* ── Stats ──────────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-3">
         {[
           { icon: Clock, label: 'Duration', value: formatDuration(resultData.duration) },
@@ -346,117 +338,44 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
         ))}
       </div>
 
-      {/* ── Timeline Editor ───────────────────────────────────────── */}
-      <div className="rounded-2xl border border-white/8 bg-[#13131f] p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <Scissors className="w-4 h-4 text-violet-400" />
-          <h3 className="text-sm font-semibold text-white">Clip Timeline</h3>
-          <span className="ml-auto text-xs text-slate-500">{segments.length} segments · {formatTime(duration)} total</span>
-        </div>
-
-        {/* Timeline ruler */}
-        <div className="relative mb-3">
-          <div className="flex justify-between text-xs text-slate-600 mb-1 px-0.5">
-            {Array.from({ length: 7 }, (_, i) => (
-              <span key={i}>{formatTime((duration / 6) * i)}</span>
-            ))}
-          </div>
-          {/* Track */}
-          <div
-            className="relative h-12 bg-white/4 rounded-xl overflow-hidden cursor-pointer border border-white/6"
-            onClick={handleTimelineClick}
-          >
-            {/* Segments */}
-            {segments.map(seg => (
-              <button
-                key={seg.id}
-                onClick={(e) => { e.stopPropagation(); jumpToSegment(seg) }}
-                className={`absolute top-1 bottom-1 rounded-lg transition-all hover:opacity-100 hover:scale-y-105 flex items-center justify-center overflow-hidden ${selectedSegment?.id === seg.id ? 'ring-2 ring-white/50' : 'opacity-80'}`}
-                style={{
-                  left: `${(seg.start / duration) * 100}%`,
-                  width: `${Math.max(2, ((seg.end - seg.start) / duration) * 100)}%`,
-                  background: `${CLIP_TYPE_COLORS[seg.type]}44`,
-                  borderLeft: `2px solid ${CLIP_TYPE_COLORS[seg.type]}`,
-                }}
-              >
-                <span className="text-xs font-bold text-white truncate px-1" style={{ fontSize: '9px' }}>
-                  {CLIP_TYPE_LABELS[seg.type]}
-                </span>
-              </button>
-            ))}
-            {/* Playhead */}
-            <div
-              className="absolute top-0 bottom-0 w-0.5 bg-violet-400 shadow-[0_0_6px_#8b5cf6]"
-              style={{ left: `${progress}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Segment List */}
-        <div className="space-y-2 max-h-48 overflow-y-auto custom-scroll">
-        {segments.map((seg) => {
-            const color = CLIP_TYPE_COLORS[seg.type]
-            const isActive = activeSegment === seg.id
-            const isSelected = selectedSegment?.id === seg.id
-            return (
-              <button
-                key={seg.id}
-                onClick={() => jumpToSegment(seg)}
-                className={`w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all ${isActive ? 'bg-white/10 ring-1 ring-violet-500/50' : isSelected ? 'bg-white/6' : 'hover:bg-white/4'}`}
-              >
-                <div
-                  className="w-1 self-stretch rounded-full flex-shrink-0"
-                  style={{ background: color }}
-                />
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: `${color}22`, border: `1px solid ${color}44` }}>
-                  <span className="text-sm">{CLIP_TYPE_LABELS[seg.type].split(' ')[0]}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-semibold text-white truncate">{seg.title || CLIP_TYPE_LABELS[seg.type]}</span>
-                    <span className="text-xs px-1.5 py-0.5 rounded-full flex-shrink-0" style={{ background: `${color}22`, color }}>
-                      {CLIP_TYPE_LABELS[seg.type]}
-                    </span>
-                    {isActive && (
-                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-violet-500/30 text-violet-300 font-medium flex-shrink-0">Playing</span>
-                    )}
-                  </div>
-                  {seg.reason && (
-                    <div className="text-xs text-slate-500 mt-0.5 truncate">{seg.reason}</div>
-                  )}
-                  <div className="text-xs text-slate-600 tabular-nums mt-0.5">
-                    {formatTime(seg.start)} → {formatTime(seg.end)} · {formatTime(seg.end - seg.start)}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <div
-                    className="text-xs font-bold px-2 py-0.5 rounded-full"
-                    style={{ background: `${color}22`, color }}
-                  >
-                    {Math.round(seg.score * 100)}%
-                  </div>
-                  <ChevronRight className="w-3 h-3 text-slate-600" />
-                </div>
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Legend */}
-        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-white/6">
-          {(Object.entries(CLIP_TYPE_LABELS) as [ClipSegment['type'], string][])
-            .filter(([type]) => segments.some(s => s.type === type))
-            .map(([type, label]) => (
-              <div key={type} className="flex items-center gap-1.5">
-                <div className="w-2 h-2 rounded-full" style={{ background: CLIP_TYPE_COLORS[type] }} />
-                <span className="text-xs text-slate-500">{label}</span>
-              </div>
-            ))}
-        </div>
+      {/* ── Keyboard Hints ────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-2 text-[10px] text-slate-600">
+        <span><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">Space</kbd> Play/Pause</span>
+        <span><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">←</kbd><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">→</kbd> Skip 5s</span>
+        <span><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">S</kbd> Split</span>
+        <span><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">Del</kbd> Delete clip</span>
+        <span><kbd className="px-1 py-0.5 rounded bg-white/6 font-mono">^Z</kbd> Undo</span>
       </div>
 
-      {/* ── Actions ───────────────────────────────────────────────── */}
+      {/* ── Edit Toolbar ────────────────────────────────────────── */}
+      <EditToolbar
+        currentTime={currentTime}
+        onSplit={() => splitClip(currentTime)}
+        onDelete={() => selectedClipId && deleteClip(selectedClipId)}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={historyIndex > 0}
+        canRedo={historyIndex < history.length - 1}
+        zoom={zoom}
+        onZoomChange={setZoom}
+        hasClipAtPlayhead={clipAtPlayhead}
+        hasSelectedClip={!!selectedClipId}
+      />
+
+      {/* ── Timeline Editor ──────────────────────────────────────── */}
+      <TimelineEditor
+        clips={timelineClips}
+        currentTime={currentTime}
+        duration={duration}
+        selectedClipId={selectedClipId}
+        onSeek={seekTo}
+        onSplit={splitClip}
+        onTrim={trimClip}
+        onDelete={deleteClip}
+        onSelectClip={selectClip}
+      />
+
+      {/* ── Actions ────────────────────────────────────────────── */}
       <div className="flex gap-3">
         <button
           onClick={handleDownload}
@@ -473,6 +392,84 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
           Share
         </button>
       </div>
+    </div>
+  )
+}
+
+// ─── Draggable timeline sub-component (used in player overlay) ──
+function DraggableTimeline({
+  currentTime,
+  duration,
+  segments,
+  onSeek,
+  progress,
+}: {
+  currentTime: number
+  duration: number
+  segments: EditedClip[]
+  onSeek: (t: number) => void
+  progress: number
+}) {
+  const timelineRef = useRef<HTMLDivElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const getTimeFromClientX = useCallback((clientX: number) => {
+    if (!timelineRef.current) return 0
+    const rect = timelineRef.current.getBoundingClientRect()
+    const ratio = (clientX - rect.left) / rect.width
+    return Math.max(0, Math.min(duration, ratio * duration))
+  }, [duration])
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+    onSeek(getTimeFromClientX(e.clientX))
+  }, [onSeek, getTimeFromClientX])
+
+  useEffect(() => {
+    if (!isDragging) return
+
+    const onMove = (e: MouseEvent) => {
+      onSeek(getTimeFromClientX(e.clientX))
+    }
+    const onUp = () => setIsDragging(false)
+
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [isDragging, onSeek, getTimeFromClientX])
+
+  return (
+    <div
+      ref={timelineRef}
+      className="relative h-[5px] bg-white/15 rounded-full cursor-pointer mb-[6px] hover:h-[7px] transition-all group"
+      onMouseDown={handleMouseDown}
+    >
+      {/* Segment markers */}
+      {segments.map(seg => (
+        <div
+          key={seg.id}
+          className="absolute top-0 h-full opacity-50 rounded-sm"
+          style={{
+            left: `${(seg.start / duration) * 100}%`,
+            width: `${((seg.end - seg.start) / duration) * 100}%`,
+            background: CLIP_TYPE_COLORS[seg.type] || '#6366f1',
+          }}
+        />
+      ))}
+      {/* Progress fill */}
+      <div
+        className="absolute left-0 top-0 h-full bg-violet-500 rounded-full transition-all duration-75"
+        style={{ width: `${progress}%` }}
+      />
+      {/* Playhead dot */}
+      <div
+        className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow-lg transition-transform ${isDragging ? 'scale-125' : ''}`}
+        style={{ left: `calc(${progress}% - 5px)` }}
+      />
     </div>
   )
 }

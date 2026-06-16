@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { VideoMetadata, Platform, ClipConfig, MusicSelection, MusicTrack, JobStatus, WSCompleteData } from '../types'
+import type { VideoMetadata, Platform, ClipConfig, MusicSelection, MusicTrack, JobStatus, WSCompleteData, EditedClip, ClipType } from '../types'
 
 // ─── Video Store ──────────────────────────────────────────────────
 interface VideoState {
@@ -45,11 +45,28 @@ interface ClipState {
   resultData: WSCompleteData | null
   processingError: string | null
 
+  // Timeline editor
+  timelineClips: EditedClip[]
+  selectedClipId: string | null
+  cutPoints: number[]
+  history: EditedClip[][]
+  historyIndex: number
+
   setConfig: (config: Partial<ClipConfig>) => void
   setProgress: (stage: JobStatus, percent: number, message: string) => void
   setResult: (data: WSCompleteData) => void
   setError: (error: string) => void
   resetProcessing: () => void
+
+  // Timeline actions
+  initTimeline: (clips: EditedClip[]) => void
+  selectClip: (id: string | null) => void
+  splitClip: (time: number) => void
+  deleteClip: (id: string) => void
+  trimClip: (id: string, start: number, end: number) => void
+  moveClip: (id: string, newStart: number) => void
+  undo: () => void
+  redo: () => void
 }
 
 export const useClipStore = create<ClipState>((set) => ({
@@ -66,11 +83,72 @@ export const useClipStore = create<ClipState>((set) => ({
   resultData: null,
   processingError: null,
 
+  timelineClips: [],
+  selectedClipId: null,
+  cutPoints: [],
+  history: [],
+  historyIndex: -1,
+
   setConfig: (partial) => set((s) => ({ config: { ...s.config, ...partial } })),
   setProgress: (processingStage, progress, statusMessage) => set({ processingStage, progress, statusMessage }),
   setResult: (resultData) => set({ resultData, processingStage: 'complete', progress: 100 }),
   setError: (processingError) => set({ processingError, processingStage: 'error' }),
   resetProcessing: () => set({ processingStage: null, progress: 0, statusMessage: '', resultData: null, processingError: null }),
+
+  // Timeline
+  initTimeline: (clips) => set({ timelineClips: clips, selectedClipId: null, cutPoints: [], history: [clips], historyIndex: 0 }),
+
+  selectClip: (id) => set({ selectedClipId: id }),
+
+  splitClip: (time) => set((s) => {
+    const target = s.timelineClips.find(c => c.start < time && c.end > time)
+    if (!target) return s
+    const newId = `${target.id}-split-${Date.now()}`
+    const a: EditedClip = { ...target, end: time }
+    const b: EditedClip = { ...target, id: newId, start: time }
+    const sorted = [...s.timelineClips].sort((a, b) => a.start - b.start)
+    const idx = sorted.findIndex(c => c.id === target.id)
+    sorted.splice(idx, 1, a, b)
+    const newHistory = s.history.slice(0, s.historyIndex + 1)
+    newHistory.push(sorted)
+    return { timelineClips: sorted, cutPoints: [...s.cutPoints, time], history: newHistory, historyIndex: s.historyIndex + 1, selectedClipId: null }
+  }),
+
+  deleteClip: (id) => set((s) => {
+    const filtered = s.timelineClips.filter(c => c.id !== id)
+    const newHistory = s.history.slice(0, s.historyIndex + 1)
+    newHistory.push(filtered)
+    return { timelineClips: filtered, selectedClipId: null, history: newHistory, historyIndex: s.historyIndex + 1 }
+  }),
+
+  trimClip: (id, start, end) => set((s) => {
+    const updated = s.timelineClips.map(c => c.id === id ? { ...c, start, end } : c)
+    const newHistory = s.history.slice(0, s.historyIndex + 1)
+    newHistory.push(updated)
+    return { timelineClips: updated, history: newHistory, historyIndex: s.historyIndex + 1 }
+  }),
+
+  moveClip: (id, newStart) => set((s) => {
+    const clip = s.timelineClips.find(c => c.id === id)
+    if (!clip) return s
+    const dur = clip.end - clip.start
+    const updated = s.timelineClips.map(c => c.id === id ? { ...c, start: newStart, end: newStart + dur } : c)
+    const newHistory = s.history.slice(0, s.historyIndex + 1)
+    newHistory.push(updated)
+    return { timelineClips: updated, history: newHistory, historyIndex: s.historyIndex + 1 }
+  }),
+
+  undo: () => set((s) => {
+    if (s.historyIndex <= 0) return s
+    const newIdx = s.historyIndex - 1
+    return { timelineClips: s.history[newIdx], historyIndex: newIdx }
+  }),
+
+  redo: () => set((s) => {
+    if (s.historyIndex >= s.history.length - 1) return s
+    const newIdx = s.historyIndex + 1
+    return { timelineClips: s.history[newIdx], historyIndex: newIdx }
+  }),
 }))
 
 // ─── Music Store ──────────────────────────────────────────────────
