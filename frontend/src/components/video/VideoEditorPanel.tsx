@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { Play, Pause, Volume2, VolumeX, Maximize2, Download, Share2, Star, Clock, FileVideo, SkipBack, SkipForward } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Maximize2, Download, Share2, Star, Clock, FileVideo, SkipBack, SkipForward, Loader2 } from 'lucide-react'
 import type { WSCompleteData, EditedClip } from '../../types'
 import { formatDuration, formatFileSize } from '../../types'
 import { useClipStore } from '../../stores'
@@ -71,6 +71,7 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
   const [zoom, setZoom] = useState(1)
+  const [isVideoLoading, setIsVideoLoading] = useState(true)
 
   const timelineClips = useClipStore(s => s.timelineClips)
   const selectedClipId = useClipStore(s => s.selectedClipId)
@@ -151,11 +152,35 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
     setVolume(val)
   }
 
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadProgress, setDownloadProgress] = useState(0)
+
   const handleDownload = async () => {
+    if (isDownloading) return
+    setIsDownloading(true)
+    setDownloadProgress(0)
     try {
       const resp = await fetch(videoUrl)
       if (!resp.ok) throw new Error('Download failed')
-      const blob = await resp.blob()
+      const contentLength = resp.headers.get('content-length')
+      const total = contentLength ? parseInt(contentLength, 10) : 0
+      const reader = resp.body!.getReader()
+      const chunks: Uint8Array[] = []
+      let received = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        chunks.push(value)
+        received += value.length
+        if (total) {
+          setDownloadProgress(Math.round((received / total) * 100))
+        }
+      }
+
+      const blob = new Blob(chunks as BlobPart[])
+      setDownloadProgress(100)
+      await new Promise(r => setTimeout(r, 300))
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -166,6 +191,8 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
       URL.revokeObjectURL(url)
     } catch (err) {
       console.error('Download failed:', err)
+    } finally {
+      setTimeout(() => { setIsDownloading(false); setDownloadProgress(0) }, 500)
     }
   }
 
@@ -220,13 +247,28 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
           src={videoUrl}
           className="w-full aspect-video object-contain bg-black"
           onClick={togglePlay}
-          preload="metadata"
+          preload="auto"
           style={{ cursor: 'pointer' }}
+          onLoadStart={() => setIsVideoLoading(true)}
+          onWaiting={() => setIsVideoLoading(true)}
+          onCanPlay={() => setIsVideoLoading(false)}
+          onPlaying={() => setIsVideoLoading(false)}
         />
 
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />
 
-        {!isPlaying && (
+        {isVideoLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60">
+            <div className="w-16 h-16 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center">
+              <Loader2 className="w-7 h-7 text-white animate-spin" />
+            </div>
+            <div className="text-white/70 text-xs font-medium">Loading video...</div>
+            <div className="w-32 h-1 bg-white/10 rounded-full overflow-hidden">
+              <div className="h-full bg-white/30 rounded-full animate-pulse" style={{ width: '60%' }} />
+            </div>
+          </div>
+        )}
+        {!isPlaying && !isVideoLoading && (
           <button onClick={togglePlay} className="absolute inset-0 flex items-center justify-center">
             <div className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center hover:bg-white/30 transition-all hover:scale-105">
               <Play className="w-7 h-7 text-white fill-white ml-1" />
@@ -280,13 +322,13 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
         {[
           { icon: Clock, label: 'Duration', value: formatDuration(resultData.duration) },
           { icon: FileVideo, label: 'File Size', value: formatFileSize(resultData.fileSize) },
           { icon: Star, label: 'AI Score', value: `${qualityPct}/100` },
         ].map(({ icon: Icon, label, value }) => (
-          <div key={label} className="p-3 rounded-xl bg-[#F5F5F7] border border-black/[0.04] text-center">
+          <div key={label} className="p-2 sm:p-3 rounded-xl bg-[#F5F5F7] border border-black/[0.04] text-center">
             <Icon className="w-4 h-4 text-[#86868B] mx-auto mb-1" />
             <div className="text-sm font-semibold text-[#1D1D1F]">{value}</div>
             <div className="text-xs text-[#86868B]">{label}</div>
@@ -295,7 +337,7 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
       </div>
 
       {/* Keyboard hints */}
-      <div className="flex flex-wrap gap-2 text-[10px] text-[#86868B]">
+      <div className="flex flex-wrap gap-1 sm:gap-2 text-[10px] text-[#86868B]">
         <span><kbd className="px-1 py-0.5 rounded bg-[#F5F5F7] font-mono border border-black/[0.06]">Space</kbd> Play/Pause</span>
         <span><kbd className="px-1 py-0.5 rounded bg-[#F5F5F7] font-mono border border-black/[0.06]">←</kbd><kbd className="px-1 py-0.5 rounded bg-[#F5F5F7] font-mono border border-black/[0.06]">→</kbd> Skip 5s</span>
         <span><kbd className="px-1 py-0.5 rounded bg-[#F5F5F7] font-mono border border-black/[0.06]">S</kbd> Split</span>
@@ -329,13 +371,35 @@ export function VideoEditorPanel({ resultData, videoDuration = 60 }: VideoEditor
         onSelectClip={selectClip}
       />
 
+      {isDownloading && (
+        <div className="mb-3">
+          <div className="flex items-center justify-between text-xs text-[#6E6E73] mb-1.5">
+            <span className="flex items-center gap-1.5">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Downloading{downloadProgress > 0 ? ` ${downloadProgress}%` : '...'}
+            </span>
+            <span>{downloadProgress}%</span>
+          </div>
+          <div className="h-2 bg-[#F5F5F7] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-[#0071E3] to-[#5856D6] rounded-full transition-all duration-300"
+              style={{ width: `${downloadProgress}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-3">
         <button
           onClick={handleDownload}
-          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-[#0071E3] to-[#5856D6] hover:from-[#0077ED] hover:to-[#5E5CDE] text-white font-semibold text-sm transition-all shadow-sm"
+          disabled={isDownloading}
+          className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-[#0071E3] to-[#5856D6] hover:from-[#0077ED] hover:to-[#5E5CDE] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-sm transition-all shadow-sm"
         >
-          <Download className="w-4 h-4" />
-          Download Clip
+          {isDownloading ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Downloading {downloadProgress}%</>
+          ) : (
+            <><Download className="w-4 h-4" /> Download Clip</>
+          )}
         </button>
         <button
           onClick={() => navigator.clipboard?.writeText(window.location.origin + resultData.downloadUrl)}

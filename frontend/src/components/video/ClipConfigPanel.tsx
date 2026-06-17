@@ -32,18 +32,18 @@ export function ClipConfigPanel() {
       {/* Duration */}
       <div className="mb-4">
         <label className="text-xs text-[#6E6E73] mb-2 block font-medium">Target Duration</label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
           {DURATIONS.map(({ value, label, desc }) => (
             <button
               key={value}
               onClick={() => setConfig({ targetDuration: value })}
-              className={`p-3 rounded-xl border text-left transition-all ${
+              className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all ${
                 config.targetDuration === value
                   ? 'border-[#0071E3] bg-[#0071E3]/5 text-[#1D1D1F]'
                   : 'border-[#D2D2D7] bg-white text-[#6E6E73] hover:border-[#86868B]'
               }`}
             >
-              <div className="font-semibold text-sm">{label}</div>
+              <div className="font-semibold text-xs sm:text-sm">{label}</div>
               <div className="text-xs opacity-60 mt-0.5">{desc}</div>
             </button>
           ))}
@@ -53,18 +53,18 @@ export function ClipConfigPanel() {
       {/* Aspect Ratio */}
       <div className="mb-4">
         <label className="text-xs text-[#6E6E73] mb-2 block font-medium">Aspect Ratio</label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
           {ASPECT_RATIOS.map(({ value, label, desc, icon: Icon }) => (
             <button
               key={value}
               onClick={() => setConfig({ aspectRatio: value as '9:16' | '1:1' | '16:9' })}
-              className={`p-3 rounded-xl border text-left transition-all ${
+              className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all ${
                 config.aspectRatio === value
                   ? 'border-[#0071E3] bg-[#0071E3]/5 text-[#1D1D1F]'
                   : 'border-[#D2D2D7] bg-white text-[#6E6E73] hover:border-[#86868B]'
               }`}
             >
-              <div className="flex items-center gap-1.5 font-semibold text-sm">
+              <div className="flex items-center gap-1.5 font-semibold text-xs sm:text-sm">
                 <Icon className={`w-3.5 h-3.5 ${config.aspectRatio === value ? 'text-[#0071E3]' : 'text-[#86868B]'}`} />
                 <span>{label}</span>
               </div>
@@ -77,18 +77,18 @@ export function ClipConfigPanel() {
       {/* Quality */}
       <div className="mb-4">
         <label className="text-xs text-[#6E6E73] mb-2 block font-medium">Output Quality</label>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
           {QUALITIES.map(({ value, label, desc }) => (
             <button
               key={value}
               onClick={() => setConfig({ quality: value as 'low' | 'medium' | 'high' })}
-              className={`p-3 rounded-xl border text-left transition-all ${
+              className={`p-2.5 sm:p-3 rounded-xl border text-left transition-all ${
                 config.quality === value
                   ? 'border-[#5856D6] bg-[#5856D6]/5 text-[#1D1D1F]'
                   : 'border-[#D2D2D7] bg-white text-[#6E6E73] hover:border-[#86868B]'
               }`}
             >
-              <div className="font-semibold text-sm">{label}</div>
+              <div className="font-semibold text-xs sm:text-sm">{label}</div>
               <div className="text-xs opacity-60 mt-0.5">{desc}</div>
             </button>
           ))}

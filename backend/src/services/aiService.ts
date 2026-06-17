@@ -316,36 +316,53 @@ export async function generateFFmpegCommand(params: {
 }): Promise<string | null> {
   const result = await callAI<string>({
     task: 'ffmpeg_command',
-    systemPrompt: 'You are an FFmpeg expert. Generate precise FFmpeg commands. Return ONLY the command, no explanation, no markdown.',
-    userPrompt: `Generate an FFmpeg command to create a video clip:
+    systemPrompt: 'You are an FFmpeg expert. Generate ONLY a valid FFmpeg command. Absolutely NO explanation, NO commentary, NO markdown, NO backticks. Start with "ffmpeg". Never describe what you are doing.',
+    userPrompt: `Generate an FFmpeg command.
 
-Input video: "${params.inputFile}"
-Clips to extract (seconds):
-${params.clips.map((c, i) => `  Clip ${i + 1}: ${c.start}s to ${c.end}s`).join('\n')}
-Music file: ${params.musicFile || 'none'}
-Music volume: ${params.musicVolume}
-Fade in: ${params.fadeIn}s
-Fade out: ${params.fadeOut}s
-Aspect Ratio: ${params.aspectRatio || '16:9'}
+Input: "${params.inputFile}"
+Clips:
+${params.clips.map((c, i) => `  ${i+1}: ${c.start}-${c.end}s`).join('\n')}
+Music: ${params.musicFile || 'none'} (vol:${params.musicVolume})
+Fade in:${params.fadeIn}s out:${params.fadeOut}s
+Aspect: ${params.aspectRatio || '16:9'}
 Output: "${params.outputFile}"
 
-Requirements:
-- Concatenate all clips in order
-- Mix music at specified volume if provided
-- Apply fade in/out effects
-- Output as MP4 H.264
-- Keep original audio mixed with music
-- Resize/crop the video to the specified aspect ratio
-- For '9:16': crop and scale to 1080x1920
-- For '1:1': crop and scale to 1080x1080
-- For '16:9': scale to 1920x1080
+Rules:
+- concat clips in order, keep original audio mixed with music
+- 9:16→1080x1920, 1:1→1080x1080, 16:9→1920x1080
+- H.264 MP4, -preset ultrafast -threads 2
 
-Return ONLY the ffmpeg command.`,
+Return ONLY the ffmpeg command. No explanation. No backticks. Start with "ffmpeg".`,
     temperature: 0.1,
     responseFormat: 'text',
   })
 
-  return result.data as string | null
+  let cmd = result.data as string | null
+  if (cmd) {
+    // Strip markdown fences
+    cmd = cmd.replace(/```(?:ffmpeg|bash|sh)?\n?/g, '').trim()
+    // Model often returns essay with command buried inside — extract ffmpeg block
+    if (!cmd.startsWith('ffmpeg')) {
+      const lines = cmd.split('\n')
+      const startIdx = lines.findIndex(l => l.trim().startsWith('ffmpeg'))
+      if (startIdx !== -1) {
+        // Collect from ffmpeg line, continue while lines look like command (not prose)
+        const blockLines: string[] = []
+        for (let i = startIdx; i < lines.length; i++) {
+          const line = lines[i]
+          const trimmed = line.trim()
+          if (i === startIdx) { blockLines.push(trimmed); continue }
+          // Stop at blank line followed by English prose
+          if (trimmed === '') continue // skip blank lines within block
+          // Stop when line is clearly prose (capital letter sentence, not flag/path/continuation)
+          if (/^[A-Z][a-z]/.test(trimmed) && !trimmed.startsWith('-') && !trimmed.includes('"') && !trimmed.includes('/') && !trimmed.endsWith('\\') && trimmed.length > 15) break
+          blockLines.push(trimmed)
+        }
+        cmd = blockLines.join('\n').trim()
+      }
+    }
+  }
+  return cmd
 }
 
 export async function scoreClipQuality(params: {
@@ -376,4 +393,42 @@ Return JSON:
 
   if (!result.data) throw new Error('AI quality scoring returned no data')
   return result.data
+}
+
+export async function generateCaptions(params: {
+  clips: Array<{ start: number; end: number; text: string }>
+  videoTitle: string
+}): Promise<string> {
+  const result = await callAI<string>({
+    task: 'caption_gen',
+    systemPrompt: 'You are a caption/subtitle writer. Generate SRT subtitles for video clips. Return ONLY the SRT content, no explanations.',
+    userPrompt: `Generate SRT captions for these video clips:
+
+Video: "${params.videoTitle}"
+Clips:
+${params.clips.map((c, i) => `  Clip ${i+1}: ${c.start}s - ${c.end}s, text: "${c.text}"`).join('\n')}
+
+Generate ONE subtitle entry per clip, timed to match each clip's start-end range.
+Write the text in the same language as the clip text.
+Return ONLY the SRT content, starting with "1".
+
+Example:
+1
+00:00:10,000 --> 00:00:25,000
+Text for first clip
+
+2
+00:00:45,000 --> 00:01:00,000
+Text for second clip`,
+    temperature: 0.2,
+    responseFormat: 'text',
+  })
+
+  let srt = result.data as string
+  if (!srt) return ''
+
+  // Clean up markdown fences if present
+  srt = srt.replace(/```(?:srt)?\n?/g, '').trim()
+
+  return srt
 }

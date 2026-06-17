@@ -53,7 +53,7 @@ export function Home() {
         </div>
 
         {/* Headline */}
-        <h1 className="text-[40px] sm:text-[56px] font-bold tracking-tight leading-[1.05] mb-5 text-[#1D1D1F]">
+        <h1 className="text-[32px] sm:text-[56px] font-bold tracking-tight leading-[1.05] mb-5 text-[#1D1D1F]">
           Paste a link.
           <br />
           <span className="bg-gradient-to-r from-[#0071E3] to-[#5856D6] bg-clip-text text-transparent">
@@ -78,12 +78,12 @@ export function Home() {
               onChange={(e) => { setInput(e.target.value); setError('') }}
               onKeyDown={handleKeyDown}
               placeholder="Paste YouTube, TikTok, or Instagram URL..."
-              className="flex-1 bg-transparent text-[#1D1D1F] placeholder:text-[#86868B] px-4 py-3.5 outline-none text-base"
+              className="flex-1 bg-transparent text-[#1D1D1F] placeholder:text-[#86868B] px-4 py-3 outline-none text-sm sm:text-base"
               autoFocus
             />
             <button
               onClick={handleSubmit}
-              className="flex items-center gap-1.5 px-5 py-3.5 bg-[#0071E3] hover:bg-[#0077ED] active:bg-[#0068D1] text-white font-medium rounded-xl transition-all text-sm whitespace-nowrap shadow-sm"
+              className="flex items-center gap-1.5 px-3 sm:px-5 py-3 bg-[#0071E3] hover:bg-[#0077ED] active:bg-[#0068D1] text-white font-medium rounded-xl transition-all text-xs sm:text-sm whitespace-nowrap shadow-sm"
             >
               Generate Clip
               <ArrowRight className="w-4 h-4" />
@@ -92,7 +92,7 @@ export function Home() {
           {error && <p className="mt-2 text-sm text-[#FF3B30] text-left pl-2">{error}</p>}
 
           {/* Platform chips */}
-          <div className="flex items-center justify-center gap-4 mt-4">
+          <div className="flex items-center justify-center gap-3 sm:gap-4 mt-4">
             {[
               { icon: Youtube, label: 'YouTube', color: 'text-[#FF0000]' },
               { icon: () => <span className="text-xs font-bold">TT</span>, label: 'TikTok', color: 'text-[#1D1D1F]' },
@@ -107,7 +107,7 @@ export function Home() {
         </div>
 
         {/* Features Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-20 w-full max-w-2xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-20 w-full max-w-2xl mx-auto px-2 sm:px-0">
           {[
             {
               icon: Sparkles,

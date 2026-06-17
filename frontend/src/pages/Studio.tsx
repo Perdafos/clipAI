@@ -122,7 +122,7 @@ export function Studio() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
               {/* Left: Preview */}
-              <div className="flex-1 p-4 lg:p-6 overflow-y-auto">
+              <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-y-auto">
                 <div className="max-w-4xl mx-auto">
                   <div className="flex items-center gap-2.5 mb-4">
                     <div className="w-8 h-8 rounded-xl bg-[#34C759]/10 flex items-center justify-center">
@@ -148,7 +148,7 @@ export function Studio() {
                 </div>
               </div>
               {/* Right: Properties */}
-              <div className="w-full lg:w-80 xl:w-96 border-t lg:border-t-0 lg:border-l border-black/[0.06] bg-[#FAFAFA] overflow-y-auto p-4 space-y-4">
+              <div className="w-full lg:w-80 xl:w-96 border-t lg:border-t-0 lg:border-l border-black/[0.06] bg-[#FAFAFA] overflow-y-auto p-3 sm:p-4 space-y-3 sm:space-y-4">
                 <div className="apple-card p-4">
                   <h3 className="text-xs font-semibold text-[#6E6E73] uppercase tracking-wider mb-3">Properties</h3>
                   <div className="space-y-3">
@@ -199,8 +199,8 @@ export function Studio() {
 
         {/* ── Main Studio (pre-processing) ──────────────────────── */}
         {!isProcessing && !isComplete && (
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div className="flex-1 overflow-y-auto p-4 lg:p-6">
+            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
               {/* Left: URL + Preview + Config */}
               <div className="lg:col-span-3 space-y-6">
                 <URLInputPanel

@@ -10,7 +10,8 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 2020,
+    allowedHosts: ['clip.perdafos.my.id', 'localhost'],
     proxy: {
       '/api': {
         target: 'http://localhost:2121',

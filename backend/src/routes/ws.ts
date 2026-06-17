@@ -3,6 +3,7 @@ import { downloadVideo, createJobDir, cleanupJob, hasFfmpeg, ffmpegPath } from '
 import { generateFFmpegCommand, scoreClipQuality } from '../services/aiService'
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import path from 'path'
 import fs from 'fs'
 
 const execAsync = promisify(exec)
@@ -35,7 +36,24 @@ export function wsHandler(ws: WebSocket, req: { url?: string }) {
   // Send current job status immediately on connect
   const job = jobStore.get(jobId)
   if (job) {
-    sendProgress(jobId, 'status', job.status as string, job.percent as number || 0, 'Connected to job')
+    if (job.status === 'complete' && job.completeData) {
+      // Reconnect after completion — re-send full complete event
+      ws.send(JSON.stringify({
+        type: 'complete',
+        jobId,
+        timestamp: Date.now(),
+        payload: { stage: 'complete', percent: 100, message: 'Your clip is ready!', data: job.completeData }
+      }))
+    } else if (job.status === 'error' && job.errorData) {
+      ws.send(JSON.stringify({
+        type: 'error',
+        jobId,
+        timestamp: Date.now(),
+        payload: { stage: 'error', percent: 0, message: (job.errorData as any).message || 'Error', data: job.errorData }
+      }))
+    } else {
+      sendProgress(jobId, 'status', job.status as string, job.percent as number || 0, 'Connected to job')
+    }
   }
 }
 
@@ -201,21 +219,26 @@ export async function processJob(
       sendProgress(jobId, 'progress', 'analyzing', 42, '✨ AI is summarizing video and finding key moments...')
 
       const { summarizeVideoMoments } = await import('../services/summarizeService')
-      summary = await summarizeVideoMoments({
-        title: metadata?.title || 'Unknown',
-        description: metadata?.description || '',
-        duration: metadata?.duration || 60,
-        platform: metadata?.platform || 'youtube',
-        chapters: metadata?.chapters || [],
-      })
+      try {
+        summary = await summarizeVideoMoments({
+          title: metadata?.title || 'Unknown',
+          description: metadata?.description || '',
+          duration: metadata?.duration || 60,
+          platform: metadata?.platform || 'youtube',
+          chapters: metadata?.chapters || [],
+        })
+      } catch (err) {
+        console.warn(`[Summarize AI] Failed: ${(err as Error).message}. Using chapters from metadata.`)
+      }
 
       sendProgress(jobId, 'progress', 'analyzing', 55,
-        `Found ${summary.chapters.length} key moments: ${summary.chapters.slice(0, 3).map(c => c.title).join(', ')}...`)
+        `Found ${summary?.chapters?.length || 0} key moments...`)
 
       // Convert summary chapters → clip timestamps
-      sendProgress(jobId, 'progress', 'generating', 65, `Building clip timeline from ${summary.chapters.length} key moments...`)
+      sendProgress(jobId, 'progress', 'generating', 65, 'Building clip timeline...')
 
-      const sortedChapters = [...summary.chapters].sort((a, b) => {
+      const chapters = summary?.chapters || []
+      const sortedChapters = [...chapters].sort((a, b) => {
         const imp: Record<string, number> = { high: 3, medium: 2, low: 1 }
         return (imp[b.importance] || 1) - (imp[a.importance] || 1)
       })
@@ -253,19 +276,23 @@ export async function processJob(
     const suggestedGenre = summary?.suggested_music_genre || 'electronic'
 
     if (musicSelection.mode === 'ai') {
-      const library = getMusicLibrary()
-      const recommendation = await recommendMusic({
-        dominantMood,
-        suggestedGenre,
-        targetDuration: clipConfig.targetDuration,
-        platform: metadata?.platform || 'youtube',
-        availableTracks: library.map(t => ({
-          id: t.id, title: t.title,
-          genre: t.genre, mood: t.mood, bpm: t.bpm,
-        }))
-      })
-      if (recommendation) {
-        musicFilePath = getMusicFilePath(recommendation.recommended_track_id)
+      try {
+        const library = getMusicLibrary()
+        const recommendation = await recommendMusic({
+          dominantMood,
+          suggestedGenre,
+          targetDuration: clipConfig.targetDuration,
+          platform: metadata?.platform || 'youtube',
+          availableTracks: library.map(t => ({
+            id: t.id, title: t.title,
+            genre: t.genre, mood: t.mood, bpm: t.bpm,
+          }))
+        })
+        if (recommendation) {
+          musicFilePath = getMusicFilePath(recommendation.recommended_track_id)
+        }
+      } catch (err) {
+        console.warn(`[Music AI] Failed, skipping music: ${(err as Error).message}`)
       }
     } else if (musicSelection.mode === 'manual' && musicSelection.trackId) {
       musicFilePath = getMusicFilePath(musicSelection.trackId)
@@ -275,85 +302,108 @@ export async function processJob(
 
     sendProgress(jobId, 'progress', 'selecting_music', 62, 'Music selected!')
 
+    // ── STEP 5: Captions (if enabled) ─────────────────────────────
+    let captionsPath: string | null = null
+    if (clipConfig.addCaptions) {
+      sendProgress(jobId, 'progress', 'generating', 70, 'Generating captions...')
+      try {
+        const { generateCaptions } = await import('../services/aiService')
+        const captionsSrt = await generateCaptions({
+          clips: selectedChapters.map((ch, i) => ({
+            start: ch.start_time,
+            end: ch.end_time,
+            text: ch.summary || ch.title,
+          })),
+          videoTitle: metadata?.title || 'Unknown',
+        })
+        captionsPath = path.join(paths.jobDir, 'captions.srt')
+        fs.writeFileSync(captionsPath, captionsSrt, 'utf-8')
+      } catch (err) {
+        console.warn(`[Captions] Failed, continuing: ${(err as Error).message}`)
+      }
+    }
+
     // ── STEP 6: Generate & Execute FFmpeg Command ──────────────
     sendProgress(jobId, 'progress', 'generating', 75, 'Processing video clips...')
 
-    if (!hasFfmpeg) {
-      // ── TRY system ffmpeg first (PATH) before giving up ─────────
-      let ffmpegFallbackSucceeded = false
-      try {
-        const simpleCmd = buildFallbackFFmpegCommand(paths.videoPath, timestamps.clips, paths.outputPath)
-        const systemCmd = simpleCmd.replace(/^ffmpeg\s+/, '')
-        await execAsync(`ffmpeg ${systemCmd}`, { timeout: 300000 })
-        ffmpegFallbackSucceeded = true
-        console.log('[ClipAI] Used system ffmpeg (PATH) as fallback')
-      } catch (sysErr) {
-        console.warn('[ClipAI Fallback] System ffmpeg also unavailable, using mock copy:', (sysErr as Error).message)
-      }
+    async function runFFmpeg(cmd: string): Promise<void> {
+      const finalCmd = cmd.replace(/^ffmpeg\s+/, `"${ffmpegPath}" `)
+      console.log(`[FFmpeg] Running: ${finalCmd}`)
+      await execAsync(finalCmd, { timeout: 300000 })
+    }
 
-      if (!ffmpegFallbackSucceeded) {
-        console.warn('[ClipAI Fallback] Simulating video rendering (no ffmpeg installed)')
+    if (!hasFfmpeg) {
+      let fallbackOk = false
+      try {
+        const simpleCmd = buildFallbackFFmpegCommand(paths.videoPath, timestamps.clips, paths.outputPath, {
+          aspectRatio: clipConfig.aspectRatio,
+          quality: clipConfig.quality,
+          targetDuration: clipConfig.targetDuration,
+          captionsPath: captionsPath || undefined,
+        })
+        await runFFmpeg(simpleCmd)
+        fallbackOk = true
+      } catch (sysErr) {
+        console.warn('[ClipAI Fallback] System ffmpeg unavailable:', (sysErr as Error).message)
+      }
+      if (!fallbackOk) {
+        console.warn('[ClipAI Fallback] Simulating video rendering (no ffmpeg)')
         for (let i = 75; i <= 90; i += 5) {
-          await new Promise(resolve => setTimeout(resolve, 500))
-          sendProgress(jobId, 'progress', 'generating', i, `Processing video clips (Mock Render)... ${Math.floor((i-75)/15*100)}%`)
+          await new Promise(r => setTimeout(r, 500))
+          sendProgress(jobId, 'progress', 'generating', i, `Mock render ${Math.floor((i-75)/15*100)}%`)
         }
-        if (fs.existsSync(paths.videoPath)) {
-          fs.copyFileSync(paths.videoPath, paths.outputPath)
-        } else {
-          fs.writeFileSync(paths.outputPath, 'mock video content')
-        }
+        try { fs.copyFileSync(paths.videoPath, paths.outputPath) } catch (_) { fs.writeFileSync(paths.outputPath, 'mock') }
       }
     } else {
-      const ffmpegCmd = await generateFFmpegCommand({
-        inputFile: paths.videoPath,
-        clips: timestamps.clips,
-        musicFile: musicFilePath,
-        outputFile: paths.outputPath,
-        musicVolume: musicSelection.volume || 0.7,
-        fadeIn: musicSelection.fadeIn || 1,
-        fadeOut: musicSelection.fadeOut || 2,
+      // Try AI command, fallback to built-in on failure
+      let aiCmd: string | null = null
+      try { aiCmd = await generateFFmpegCommand({ inputFile: paths.videoPath, clips: timestamps.clips, musicFile: musicFilePath, outputFile: paths.outputPath, musicVolume: musicSelection.volume || 0.7, fadeIn: musicSelection.fadeIn || 1, fadeOut: musicSelection.fadeOut || 2, aspectRatio: clipConfig.aspectRatio }) } catch (e) { console.warn(`[FFmpeg AI] Failed: ${(e as Error).message}`) }
+
+      const fallbackCmd = buildFallbackFFmpegCommand(paths.videoPath, timestamps.clips, paths.outputPath, {
         aspectRatio: clipConfig.aspectRatio,
+        quality: clipConfig.quality,
+        targetDuration: clipConfig.targetDuration,
+        captionsPath: captionsPath || undefined,
       })
 
-      if (!ffmpegCmd) {
-        // Fallback to simple clip extraction
-        const simpleCmd = buildFallbackFFmpegCommand(paths.videoPath, timestamps.clips, paths.outputPath)
-        const finalCmd = simpleCmd.replace(/^ffmpeg\s+/, `"${ffmpegPath}" `)
-        console.log(`[FFmpeg] Running: ${finalCmd}`)
-        await execAsync(finalCmd, { timeout: 300000 })
-      } else {
-        // Validate AI-generated command for security
-        if (validateFFmpegCommand(ffmpegCmd)) {
-          // Inject thread & preset limits to prevent freeze
-          let safeCmd = ffmpegCmd
-          if (!safeCmd.includes('-preset')) safeCmd = safeCmd.replace(/-c:v libx264/, '-c:v libx264 -preset ultrafast')
-          if (!safeCmd.includes('-threads')) safeCmd = safeCmd.replace(/-c:v libx264/, '-c:v libx264 -threads 2')
-          const finalCmd = safeCmd.replace(/^ffmpeg\s+/, `"${ffmpegPath}" `)
-          console.log(`[FFmpeg] Running: ${finalCmd}`)
-          await execAsync(finalCmd, { timeout: 300000 })
+      if (aiCmd) {
+        console.log(`[FFmpeg] AI cmd: "${aiCmd}"`)
+        if (validateFFmpegCommand(aiCmd)) {
+          let safe = aiCmd.replace(/\\\s*\n\s*/g, ' ').replace(/\s+/g, ' ')
+          if (!safe.includes('-preset')) safe = safe.replace(/-c:v libx264/, '-c:v libx264 -preset ultrafast')
+          if (!safe.includes('-threads')) safe = safe.replace(/-c:v libx264/, '-c:v libx264 -threads 2')
+          try { await runFFmpeg(safe); } catch (_e) { console.warn('[FFmpeg] AI cmd failed, fallback'); await runFFmpeg(fallbackCmd); }
         } else {
-          throw new Error('Generated FFmpeg command failed security validation')
+          console.warn('[FFmpeg] AI cmd failed validation, fallback')
+          await runFFmpeg(fallbackCmd)
         }
+      } else {
+        await runFFmpeg(fallbackCmd)
       }
     }
 
     sendProgress(jobId, 'progress', 'finalizing', 90, 'Finalizing your clip...')
 
     // ── STEP 7: Quality Check ─────────────────────────────────
-    const qualityResult = await scoreClipQuality({
-      title: metadata?.title || 'Unknown',
-      duration: timestamps.total_duration,
-      clipCount: timestamps.clips.length,
-      hasMusic: !!musicFilePath,
-      dominantMood,
-    })
+    let qualityResult: { score: number; feedback: string } | null = null
+    try {
+      qualityResult = await scoreClipQuality({
+        title: metadata?.title || 'Unknown',
+        duration: timestamps.total_duration,
+        clipCount: timestamps.clips.length,
+        hasMusic: !!musicFilePath,
+        dominantMood,
+      })
+    } catch (err) {
+      console.warn(`[Quality AI] Failed, using default: ${(err as Error).message}`)
+    }
 
     const fileSize = fs.existsSync(paths.outputPath)
       ? fs.statSync(paths.outputPath).size
       : 0
 
     // ── STEP 8: Complete ──────────────────────────────────────
-    sendProgress(jobId, 'complete', 'complete', 100, 'Your clip is ready!', {
+    const completePayload = {
       downloadUrl: `/downloads/${jobId}/final_output.mp4`,
       videoTitle: metadata?.title || 'clip',
       duration: timestamps.total_duration,
@@ -369,7 +419,11 @@ export async function processJob(
         score: ch.importance === 'high' ? 0.95 : ch.importance === 'medium' ? 0.8 : 0.65,
         title: ch.title,
       })),
-    })
+    }
+    sendProgress(jobId, 'complete', 'complete', 100, 'Your clip is ready!', completePayload)
+    // Save for WS reconnect
+    const __j = jobStore.get(jobId) || {}
+    jobStore.set(jobId, { ...__j, status: 'complete', completeData: completePayload })
 
     // Schedule cleanup in 1 hour (files + job store)
     setTimeout(() => {
@@ -380,23 +434,30 @@ export async function processJob(
   } catch (err: unknown) {
     const error = err as Error
     console.error(`Job ${jobId} error:`, error.message)
-    sendProgress(jobId, 'error', 'error', 0, error.message, {
-      code: 'PROCESSING_ERROR',
-      message: error.message,
-      retryable: true,
-    })
+    const errorPayload = { code: 'PROCESSING_ERROR', message: error.message, retryable: true }
+    sendProgress(jobId, 'error', 'error', 0, error.message, errorPayload)
+    // Save for WS reconnect
+    const __j = jobStore.get(jobId) || {}
+    jobStore.set(jobId, { ...__j, status: 'error', errorData: errorPayload })
   }
 }
 
 function validateFFmpegCommand(cmd: string): boolean {
-  const forbidden = ['rm ', 'sudo', 'curl ', 'wget ', '| bash', '&&', ';', '`']
-  return cmd.startsWith('ffmpeg') && !forbidden.some(f => cmd.includes(f))
+  const forbidden = ['rm ', 'sudo', 'curl ', 'wget ', '| bash']
+  const cleaned = cmd.replace(/`/g, '').trim()
+  return cleaned.startsWith('ffmpeg') && !forbidden.some(f => cleaned.includes(f))
 }
 
 function buildFallbackFFmpegCommand(
   inputFile: string,
   clips: Array<{ start: number; end: number }>,
-  outputFile: string
+  outputFile: string,
+  opts?: {
+    aspectRatio?: '9:16' | '1:1' | '16:9'
+    quality?: string
+    targetDuration?: number
+    captionsPath?: string
+  }
 ): string {
   if (clips.length === 0) return ''
 
@@ -409,10 +470,52 @@ function buildFallbackFFmpegCommand(
     concatParts.push(`[v${i}][a${i}]`)
   })
 
-  const filter = [
-    ...filterParts,
-    `${concatParts.join('')}concat=n=${clips.length}:v=1:a=1[vout][aout]`
-  ].join(';')
+  // Quality → bitrate + resolution limit
+  const qualityMap: Record<string, { maxHeight: number; videoBitrate: string; audioBitrate: string }> = {
+    low:    { maxHeight: 720,  videoBitrate: '2M', audioBitrate: '96k' },
+    medium: { maxHeight: 1080, videoBitrate: '5M', audioBitrate: '128k' },
+    high:   { maxHeight: 1080, videoBitrate: '10M', audioBitrate: '192k' },
+  }
+  const q = opts?.quality ? qualityMap[opts.quality] : qualityMap.medium
 
-  return `ffmpeg -i "${inputFile}" -filter_complex "${filter}" -map "[vout]" -map "[aout]" -c:v libx264 -preset ultrafast -threads 2 -c:a aac "${outputFile}" -y`
+  // Aspect ratio → video filter
+  const arFilters: string[] = []
+  const ar = opts?.aspectRatio || '16:9'
+  if (ar === '9:16') {
+    arFilters.push('scale=1080:1920:force_original_aspect_ratio=increase')
+    arFilters.push('crop=1080:1920')
+  } else if (ar === '1:1') {
+    arFilters.push('scale=1080:1080:force_original_aspect_ratio=increase')
+    arFilters.push('crop=1080:1080')
+  } else {
+    arFilters.push(`scale='min(1920,iw)':'min(${q.maxHeight},ih)':force_original_aspect_ratio=decrease`)
+  }
+
+  // Height limit per quality
+  if (q.maxHeight < 1080) {
+    arFilters.push(`scale='min(${q.maxHeight * (ar === '9:16' ? 9 : 16) / 16},iw)':'min(${q.maxHeight},ih)'`)
+  }
+
+  const scaleFilter = arFilters.length > 0 ? `[vout]${arFilters.join(',')}[vscaled]` : ''
+  const lastV = scaleFilter ? 'vscaled' : 'vout'
+
+  // Subtitles
+  const subFilter = opts?.captionsPath
+    ? `[${lastV}]subtitles='${opts.captionsPath.replace(/'/g, "'\\''")}'[vfin]`
+    : ''
+
+  // Build full filter graph
+  const segments = [
+    ...filterParts,
+    `${concatParts.join('')}concat=n=${clips.length}:v=1:a=1[vout][aout]`,
+  ]
+  if (scaleFilter) segments.push(scaleFilter)
+  if (subFilter) segments.push(subFilter)
+
+  const filter = segments.join(';')
+  const outputLabel = subFilter ? 'vfin' : lastV
+
+  const duration = opts?.targetDuration ? `-t ${opts.targetDuration}` : ''
+
+  return `ffmpeg -i "${inputFile}" -filter_complex "${filter}" -map "[${outputLabel}]" -map "[aout]" -c:v libx264 -preset ultrafast -threads 2 -b:v ${q.videoBitrate} -c:a aac -b:a ${q.audioBitrate} ${duration} "${outputFile}" -y`
 }

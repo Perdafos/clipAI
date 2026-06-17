@@ -64,19 +64,47 @@ app.get('/health', (c) => c.json({
   version: '1.0.0'
 }))
 
-// Static files (downloads)
+// Static files (downloads) — stream instead of readFileSync
 app.get('/downloads/:jobId/:filename', async (c) => {
   const { jobId, filename } = c.req.param()
   const filePath = `./uploads/${jobId}/${filename}`
   if (!fs.existsSync(filePath)) {
     return c.json({ error: 'File not found' }, 404)
   }
-  const file = fs.readFileSync(filePath)
-  return new Response(file, {
+  const stat = fs.statSync(filePath)
+  const fileStream = fs.createReadStream(filePath)
+
+  // Check for Range header (seek support for video players)
+  const range = c.req.header('range')
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-')
+    const start = parseInt(parts[0], 10)
+    const end = parts[1] ? parseInt(parts[1], 10) : stat.size - 1
+    const stream = fs.createReadStream(filePath, { start, end })
+    return new Response(stream as any, {
+      status: 206,
+      headers: {
+        'Content-Type': 'video/mp4',
+        'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+        'Content-Length': String(end - start + 1),
+        'Accept-Ranges': 'bytes',
+        'Content-Disposition': `inline; filename="${filename}"`,
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=3600',
+      },
+    })
+  }
+
+  return new Response(fileStream as any, {
+    status: 200,
     headers: {
       'Content-Type': 'video/mp4',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    }
+      'Content-Length': String(stat.size),
+      'Accept-Ranges': 'bytes',
+      'Content-Disposition': `inline; filename="${filename}"`,
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'public, max-age=3600',
+    },
   })
 })
 

@@ -60,7 +60,7 @@ export function ClipPromptPanel({ onPromptChange, prompt }: ClipPromptPanelProps
           value={prompt}
           onChange={(e) => onPromptChange(e.target.value)}
           placeholder={`Tempel ringkasan dari Gemini/YouTube di sini...\n\nContoh:\nSerangkaian Tantangan (0:50 - 12:23): Kedua tim bersaing...\nMomen Penting (14:05 - 14:18): Dunk spektakuler...\nAkhir Pertandingan (35:41 - 38:00): Highlight pemain...`}
-          className="w-full h-44 bg-[#F5F5F7] border border-[#D2D2D7] rounded-xl px-4 py-3.5 text-sm text-[#1D1D1F] placeholder:text-[#86868B] resize-none focus:outline-none focus:border-[#0071E3] focus:shadow-[0_0_0_3px_rgba(0,113,227,0.12)] leading-relaxed transition-all font-mono"
+          className="w-full h-36 md:h-44 bg-[#F5F5F7] border border-[#D2D2D7] rounded-xl px-4 py-3.5 text-sm text-[#1D1D1F] placeholder:text-[#86868B] resize-none focus:outline-none focus:border-[#0071E3] focus:shadow-[0_0_0_3px_rgba(0,113,227,0.12)] leading-relaxed transition-all font-mono"
           spellCheck={false}
         />
         {prompt && (
@@ -73,7 +73,7 @@ export function ClipPromptPanel({ onPromptChange, prompt }: ClipPromptPanelProps
         )}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <button
           onClick={handlePaste}
           className="flex items-center gap-2 px-3 py-2 rounded-xl border border-[#D2D2D7] bg-white hover:bg-[#F5F5F7] text-[#6E6E73] hover:text-[#1D1D1F] text-xs font-medium transition-all"
